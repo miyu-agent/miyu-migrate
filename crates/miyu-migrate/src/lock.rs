@@ -1,6 +1,6 @@
 //! 旧核心停了没有（细则第十三节第 1 条）：照旧版自己的判法，先对 `<旧根>/daemon.lock` 试排他锁，拿得到就是没有旧核心在跑；
 //! 拿不到再读里面的 `{"pid","runtime_dir"}` 说给人听（`crates/miyu-core/src/ipc/lifecycle.rs:123-172`）。不能只读文件里的
-//! pid：那多半是上一任留下的。
+//! pid：那多半是上一任留下的。Windows 上的锁是强制的，锁着的文件别的句柄读不了，那里只说得出「占着」、说不出是谁。
 
 use std::fs::{OpenOptions, TryLockError};
 use std::io;

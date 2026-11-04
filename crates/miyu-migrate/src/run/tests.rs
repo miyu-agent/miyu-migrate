@@ -43,18 +43,17 @@ fn a_run_leaves_the_archive_its_list_and_two_reports() {
 fn a_running_old_core_stops_the_run_before_anything_is_written() {
     let old = old_root();
     let lock = old.path().join("daemon.lock");
+    fs::write(&lock, r#"{"pid":777}"#).unwrap();
     let held = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
-        .truncate(true)
         .open(&lock)
         .unwrap();
     held.lock().unwrap();
-    fs::write(&lock, r#"{"pid":777}"#).unwrap();
     let state = tempfile::tempdir().unwrap();
     match run(&plan(old.path(), state.path())) {
-        Err(RunError::StillRunning(Some(777))) => {}
+        // Windows 上锁着的文件读不出写了谁，只知道占着。
+        Err(RunError::StillRunning(pid)) if pid == (!cfg!(windows)).then_some(777) => {}
         other => panic!("{other:?}"),
     }
     assert_eq!(fs::read_dir(state.path()).unwrap().count(), 0, "什么都没写");
