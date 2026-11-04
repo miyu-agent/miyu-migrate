@@ -34,6 +34,8 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 imagesize = "0.14"
 # 测试里在进程里起真核心（照 miyu-im 测试的起法），同一个提交。
 miyu-endpoint = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+# 测试里的核心照真核心起来时那样拼配置清单（包声明的项：供应商、模型、搜索……），同 miyu-im 的测试；搜索的项在 `net` 里。
+miyu-core = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f", default-features = false, features = ["net"] }
 miyu-session = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
 miyu-ipc = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
 miyu-store = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }

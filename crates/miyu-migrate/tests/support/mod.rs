@@ -53,14 +53,27 @@ pub fn fresh_in(parent: &Path) -> Fresh {
             let opened = miyu_ipc::open(&serving, &dirs).unwrap();
             let resources =
                 ResourceRoot::at(Path::new(miyu_client::WORKSPACE_ROOT).join("resources"));
-            let core = Arc::new(miyu_endpoint::Core::new(
-                serving.clone(),
-                resources,
-                Arc::new(Script::new(Vec::new())),
-                miyu_tool::Catalog::default(),
+            // 配置清单照真核心起来时那样拼：包声明的项（供应商、模型、搜索……）也在。
+            let mut found = miyu_endpoint::packages::load(&resources, &serving);
+            let packaged = miyu_core::settings::Packaged::of(&mut found);
+            let config = miyu_endpoint::config::Config::load(
+                &serving,
                 None,
-                opened.token.clone(),
-            ));
+                packaged.all(),
+                miyu_endpoint::config::Environment::of(&[]),
+            );
+            let core = Arc::new(
+                miyu_endpoint::Core::new(
+                    serving.clone(),
+                    resources,
+                    Arc::new(Script::new(Vec::new())),
+                    miyu_tool::Catalog::default(),
+                    None,
+                    opened.token.clone(),
+                )
+                .with_config(config)
+                .with_packages(found),
+            );
             ready.send(()).unwrap();
             miyu_endpoint::run(opened.listener, core).await;
         });

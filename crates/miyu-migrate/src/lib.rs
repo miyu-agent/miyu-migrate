@@ -3,6 +3,7 @@
 
 pub mod archive;
 pub mod core;
+pub mod jsonc;
 pub mod layout;
 pub mod lock;
 pub mod memories;
@@ -11,3 +12,4 @@ pub mod records;
 pub mod report;
 pub mod run;
 pub mod sessions;
+pub mod settings;

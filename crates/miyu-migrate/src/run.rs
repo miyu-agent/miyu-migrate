@@ -1,4 +1,4 @@
-//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆）、
+//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆、配置）、
 //! 出报告。
 
 use std::fmt;
@@ -196,6 +196,9 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         .map_err(RunError::Core)?;
     report.items.push(memories);
     report.pending.extend(pending);
+    report
+        .items
+        .push(crate::settings::migrate(core, &copy).map_err(RunError::Core)?);
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)
