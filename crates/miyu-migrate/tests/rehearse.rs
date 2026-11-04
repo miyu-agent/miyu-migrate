@@ -98,6 +98,21 @@ fn rehearse() {
         space: run::free_space,
     };
     let first = run::run(&plan("2026-11-04T08:00:00Z"), &mut core).unwrap();
+    // 做好的表情包：核心认不认得（不装）。
+    let made = first.human.parent().unwrap().to_path_buf();
+    for entry in std::fs::read_dir(&made).unwrap().filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("legacy-memes-") {
+            let info = core.call(
+                "package.info",
+                json!({"path": entry.path().display().to_string()}),
+            );
+            println!(
+                "  {name}：{}",
+                info.map_or_else(|said| said.code, |_| "核心认得".to_string())
+            );
+        }
+    }
     let first = agent(&first);
     println!(
         "第一遍：压缩包 {} 个文件\n{}",

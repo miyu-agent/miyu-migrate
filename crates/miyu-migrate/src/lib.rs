@@ -6,6 +6,7 @@ pub mod core;
 pub mod jsonc;
 pub mod layout;
 pub mod lock;
+pub mod memes;
 pub mod memories;
 pub mod personas;
 pub mod records;
