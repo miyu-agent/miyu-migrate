@@ -7,6 +7,10 @@
 //! ```
 //!
 //! 副本要先去掉 `config/config.jsonc` 里的 key、删掉 `daemon.lock`；演完新数据根自己删，副本由演练的人删。
+//!
+//! QQ 消息记录：给了 `MIYU_MIGRATE_IM`（im 的程序）的，照真的 im 导进 `MIYU_MIGRATE_IM_STATE`（im 的状态目录，放 `records.db`；
+//! 演练拿主人 im 库的一份拷贝）；没给的当 im 没装。直接跑 `miyu-im` 还要给它 `MIYU_RESOURCES`、`MIYU_PACKAGE_DIR`（从
+//! `miyu im` 转交时由核心给），演练时设在环境里，照样传下去。
 
 #![allow(clippy::unwrap_used, reason = "演练：出错就该停")]
 
@@ -51,6 +55,27 @@ fn summary(agent: &Value) -> String {
     out
 }
 
+/// 照 `MIYU_MIGRATE_IM` 导：im 的状态目录是 `MIYU_MIGRATE_IM_STATE`，数据根是演练的新数据根（不碰别的数据根）。
+fn im(root: &miyu_store::root::DataRoot) -> miyu_migrate::records::Importer {
+    let (Some(program), Some(state)) = (
+        std::env::var_os("MIYU_MIGRATE_IM"),
+        std::env::var_os("MIYU_MIGRATE_IM_STATE"),
+    ) else {
+        return miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im")));
+    };
+    let home = root.path().to_path_buf();
+    miyu_migrate::records::Importer::new(move |file| {
+        std::process::Command::new(&program)
+            .args(["records", "import"])
+            .arg(file)
+            .env("MIYU_HOME", &home)
+            .env("MIYU_STATE_DIR", &state)
+            .env("LC_ALL", "C.UTF-8")
+            .env("LANG", "C.UTF-8")
+            .output()
+    })
+}
+
 fn agent(done: &run::Done) -> Value {
     serde_json::from_str(&std::fs::read_to_string(&done.agent).unwrap()).unwrap()
 }
@@ -69,6 +94,7 @@ fn rehearse() {
         state: state.clone(),
         at: at.parse().unwrap(),
         root: fresh.root.clone(),
+        records: im(&fresh.root),
         space: run::free_space,
     };
     let first = run::run(&plan("2026-11-04T08:00:00Z"), &mut core).unwrap();

@@ -23,6 +23,8 @@ pub struct Plan {
     pub at: jiff::Timestamp,
     /// 新版的数据根：借快照时读它的 blob 库。
     pub root: miyu_client::places::DataRoot,
+    /// QQ 消息记录交 im 导（真跑的是 `miyu im records import`）。
+    pub records: crate::records::Importer,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
 }
@@ -186,6 +188,9 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     });
     report.items.extend(persona_items(&mapped, &found.extras));
     report.items.push(sessions);
+    report
+        .items
+        .push(crate::records::migrate(&copy, &dir, &plan.records));
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)

@@ -6,6 +6,7 @@ pub mod core;
 pub mod layout;
 pub mod lock;
 pub mod personas;
+pub mod records;
 pub mod report;
 pub mod run;
 pub mod sessions;

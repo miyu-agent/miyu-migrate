@@ -42,6 +42,7 @@ fn plan(old: &Path, state: &Path) -> Plan {
         state: state.to_path_buf(),
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: miyu_client::places::DataRoot::at(state.join("new-root")),
+        records: crate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         space: plenty,
     }
 }

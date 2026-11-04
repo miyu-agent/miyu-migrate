@@ -152,6 +152,7 @@ fn tool_extras_questions_queued_replays_and_children_come_along() {
         state: fresh.root.path().join("var/lib/miyu-migrate"),
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: fresh.root.clone(),
+        records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         space: run::free_space,
     };
     let done = run::run(&plan, &mut core).unwrap();

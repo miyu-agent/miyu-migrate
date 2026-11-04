@@ -40,6 +40,7 @@ fn main() -> ExitCode {
     };
     let program =
         std::env::var_os("MIYU_PROGRAM").map_or_else(|| PathBuf::from("miyu"), PathBuf::from);
+    let records = miyu_migrate::records::Importer::program(program.clone());
     let mut core = match Live::connect(&root, move || {
         let mut core = std::process::Command::new(&program);
         core.arg("core");
@@ -56,6 +57,7 @@ fn main() -> ExitCode {
         state,
         at: jiff::Timestamp::now(),
         root: root.clone(),
+        records,
         space: run::free_space,
     };
     match run::run(&plan, &mut core) {
