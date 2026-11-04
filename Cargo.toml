@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+tar = "0.4"
+zstd = "0.14"
+walkdir = "2.5"
+jiff = "0.2"
+tempfile = "3.27"
+
+# 同核心（核心仓库根目录的 Cargo.toml，理由见核心的施工单 0-1「我定的」）。
+[workspace.lints.rust]
+unsafe_code = "forbid"
+# 不吞错误：必须处理的返回值不许不理。
+unused_must_use = "deny"
+# 公开的东西都要有文档注释。
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+# 不吞错误：不许用 `let _ =` 或 `.ok()` 把错误悄悄扔掉。真要扔，写 #[expect(..., reason = "...")]。
+let_underscore_must_use = "deny"
+unused_result_ok = "deny"
+# 读到坏数据要报错，不能直接崩。测试里允许，见 clippy.toml。
+unwrap_used = "deny"
+# 会出错的函数写 # Errors，会 panic 的写 # Panics。
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1

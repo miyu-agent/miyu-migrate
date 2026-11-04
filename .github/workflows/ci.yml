@@ -1,0 +1,35 @@
+# 三平台 CI（照核心、终端、im 那一份）：每台机器跑格式、clippy、测试。
+name: CI
+
+on:
+  push:
+    branches: [main, "step/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux 钉 24.04：同核心，发行构建以 glibc 2.39 为基线。
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: 装上 rust-toolchain.toml 钉住的工具链
+        run: rustup toolchain install
+      - name: 取编译缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: 格式
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: 测试
+        run: cargo test --workspace --locked

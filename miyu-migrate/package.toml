@@ -1,0 +1,18 @@
+# 从旧版 Miyu 迁过来的软件包清单（设计见仓库 docs/）：装上以后多一条 miyu migrate，把旧版（0.7.x）的数据根迁进新版。
+# 给人看的字，不发给模型。
+
+[package]
+version = "0.1.0"
+targets = ["linux-x86_64", "macos-aarch64", "windows-x86_64"]
+protocol = [1, 1]
+name = { en = "Migrate from Old Miyu", zh = "从旧版 Miyu 迁过来", ja = "旧版 Miyu からの移行" }
+summary = { en = "Move sessions, memories, settings and files from Miyu 0.7 into this version", zh = "把旧版 Miyu（0.7）的会话、记忆、设置和文件迁进这一版", ja = "Miyu 0.7 の会話・記憶・設定・ファイルをこのバージョンへ移す" }
+icon = "archive-restore"
+author = "miyu-agent"
+upstream = "https://github.com/miyu-agent/miyu-migrate"
+
+# 人在终端里跑：转交出去的程序就是人（核心 docs/blueprint/packages.md「转交」第 5 条），不另声明能力。
+[command]
+name = "migrate"
+program = "miyu-migrate"
+about = { en = "Migrate an old Miyu data folder into this version", zh = "把旧版 Miyu 的数据目录迁进这一版", ja = "旧版 Miyu のデータフォルダをこのバージョンへ移す" }
