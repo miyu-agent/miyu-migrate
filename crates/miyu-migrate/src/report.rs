@@ -24,6 +24,9 @@ pub struct Report {
     pub archive: Option<Archive>,
     /// 旧根是什么样。
     pub old_root: OldRoot,
+    /// 旧人格映射成了哪个新人格（会话、记忆照它写）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub personas: Vec<crate::personas::Mapped>,
     /// 每一类，照迁的先后。
     pub items: Vec<Item>,
     /// 留给以后接着迁的（例如超长没导的记忆），只有位置。
@@ -148,6 +151,29 @@ impl Report {
                 "旧目录整个打成了压缩包：`{}`（{} 个文件，SHA-256 `{}`）。确认新版用着没问题以后，可以删掉旧目录，只留这个包。\n\n",
                 archive.path, archive.files, archive.sha256
             ));
+        }
+        if !self.personas.is_empty() {
+            out.push_str("## 人格\n\n| 旧版 | 名字 | 新版 | 怎么来的 |\n|---|---|---|---|\n");
+            for row in &self.personas {
+                let how = match row.how {
+                    crate::personas::How::Created => "新建",
+                    crate::personas::How::Existing => "已经有同名的",
+                    crate::personas::How::Engineer => "出厂的软件工程师",
+                    crate::personas::How::Missing => "没映射上",
+                };
+                out.push_str(&format!(
+                    "| `{}` | {} | {} | {how}{} |\n",
+                    row.old,
+                    row.name,
+                    row.new
+                        .as_deref()
+                        .map_or("—".to_string(), |new| format!("`{new}`")),
+                    row.note
+                        .as_deref()
+                        .map_or(String::new(), |note| format!("（{note}）")),
+                ));
+            }
+            out.push('\n');
         }
         out.push_str("## 每一类\n\n");
         for item in &self.items {

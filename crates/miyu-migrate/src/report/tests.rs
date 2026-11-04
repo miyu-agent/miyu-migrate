@@ -20,6 +20,13 @@ fn sample() -> Report {
             admin: Some("a".to_string()),
             rolled_back: false,
         },
+        personas: vec![crate::personas::Mapped {
+            old: "default".to_string(),
+            name: "Miyu".to_string(),
+            new: Some("persona-1".to_string()),
+            how: crate::personas::How::Existing,
+            note: None,
+        }],
         items: vec![
             Item {
                 what: "sessions".to_string(),
@@ -84,6 +91,10 @@ fn the_human_report_lists_only_what_was_left_behind() {
     );
     assert!(
         human.contains("### sessions\n\n迁了一部分，128 条，跳过 1 条。"),
+        "{human}"
+    );
+    assert!(
+        human.contains("| `default` | Miyu | `persona-1` | 已经有同名的 |"),
         "{human}"
     );
     let table = &human[human.find("## 没迁的").expect("有没迁的那一节")..];

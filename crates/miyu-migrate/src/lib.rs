@@ -2,7 +2,9 @@
 //! 新版，最后出两份报告。迁不了的不硬迁，留在压缩包里、报告写明在哪。
 
 pub mod archive;
+pub mod core;
 pub mod layout;
 pub mod lock;
+pub mod personas;
 pub mod report;
 pub mod run;

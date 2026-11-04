@@ -15,9 +15,21 @@ tar.workspace = true
 zstd.workspace = true
 walkdir.workspace = true
 jiff.workspace = true
+blake3.workspace = true
+tokio.workspace = true
+fs4.workspace = true
+miyu-client.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# 真核心：`testkit` 给资源目录的位置（`WORKSPACE_ROOT`）、假模型、样本的软件工程师。
+miyu-client = { workspace = true, features = ["testkit"] }
+miyu-endpoint.workspace = true
+miyu-session = { workspace = true, features = ["testkit"] }
+miyu-ipc.workspace = true
+miyu-store.workspace = true
+miyu-tool.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true

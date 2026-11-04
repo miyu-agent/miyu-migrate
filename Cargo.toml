@@ -18,6 +18,20 @@ zstd = "0.14"
 walkdir = "2.5"
 jiff = "0.2"
 tempfile = "3.27"
+# 旧版 scope、会话编号里的哈希（旧版用的就是 blake3）。
+blake3 = "1.8"
+# 一问一答连核心：门面的 `open::Core` 是异步的，迁移程序自己带一个单线程的运行时。
+tokio = { version = "1", features = ["rt"] }
+# 打包前看状态目录那块盘还剩多少（三个平台）。
+fs4 = "0.13"
+# 新核心：连核心的门面，钉在一个提交上，核心改了格式跟着它的版本重编（细则第十四节）。
+miyu-client = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+# 测试里在进程里起真核心（照 miyu-im 测试的起法），同一个提交。
+miyu-endpoint = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-session = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-ipc = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-store = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-tool = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
 
 # 同核心（核心仓库根目录的 Cargo.toml，理由见核心的施工单 0-1「我定的」）。
 [workspace.lints.rust]
