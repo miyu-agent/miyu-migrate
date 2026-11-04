@@ -3,74 +3,16 @@
 
 #![allow(clippy::unwrap_used, reason = "测试：读坏了就该停")]
 
+mod support;
+
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use serde_json::{Value, json};
 
 use miyu_migrate::core::{Core, Live};
 use miyu_migrate::personas::{LEGACY_PERSONA, parse_dialogs};
 use miyu_migrate::run::{self, Plan};
-use miyu_session::testkit::Script;
-use miyu_store::env::{Env, Platform};
-use miyu_store::resources::ResourceRoot;
-use miyu_store::root::DataRoot;
-
-/// 新版的数据根，核心在一条自己的线程里跑着。
-struct Fresh {
-    _dir: tempfile::TempDir,
-    root: DataRoot,
-}
-
-fn fresh() -> Fresh {
-    let dir = tempfile::tempdir().unwrap();
-    let env = Env {
-        platform: Platform::current(),
-        miyu_home: Some(dir.path().join("miyu").into_os_string()),
-        home: None,
-        xdg_cache_home: None,
-        local_app_data: None,
-        miyu_resources: None,
-        exe: None,
-    };
-    let root = DataRoot::locate(&env).unwrap();
-    root.prepare().unwrap();
-    miyu_session::testkit::install_sample_persona(&root);
-    // 监听要在运行时里绑：核心整个在自己的线程、自己的运行时里起，绑好了才交回。
-    let (ready, bound) = std::sync::mpsc::channel();
-    let serving = root.clone();
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async move {
-            let dirs = miyu_ipc::Dirs {
-                runtime_dir: None,
-                ..miyu_ipc::Dirs::current()
-            };
-            let opened = miyu_ipc::open(&serving, &dirs).unwrap();
-            let resources =
-                ResourceRoot::at(Path::new(miyu_client::WORKSPACE_ROOT).join("resources"));
-            let core = Arc::new(miyu_endpoint::Core::new(
-                serving.clone(),
-                resources,
-                Arc::new(Script::new(Vec::new())),
-                miyu_tool::Catalog::default(),
-                None,
-                opened.token.clone(),
-            ));
-            ready.send(()).unwrap();
-            miyu_endpoint::run(opened.listener, core).await;
-        });
-    });
-    bound.recv().unwrap();
-    Fresh { _dir: dir, root }
-}
-
-fn connect(root: &DataRoot) -> Live {
-    Live::connect(root, || {
-        std::process::Command::new("miyu-core-is-already-running")
-    })
-    .unwrap()
-}
+use support::{connect, fresh};
 
 /// 旧根（家目录布局）：一个自己建的人格「小猫」（带改过的示范对话），旧 Miyu 的角色扮演提示停用了。
 fn old_root() -> tempfile::TempDir {
