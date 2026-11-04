@@ -38,12 +38,29 @@
    `absent`）；`session.import {path, archive: true}`。
 10. 每个会话数轮数、附件数，导入回 `sessions` 或 `present` 的算迁了；报告逐类写条数，没迁的写为什么。
 
+## 中
+
+1. 场所：`platform_session_bindings` 里平台是 `onebot` 的，`venue = qq:<机器人>:<种类>:<号>`；群的 `confined: true`。别的平台的整会话
+   不导（报告写 `platform-<平台>`）。
+2. 群的一轮照每行开头的号拆（细则第一节第 11 条，格式照旧版 `real_context/targeting.rs`）：只拆后三节，`[Prior group chat records]`
+   不拆，她自己的 `[you]` 不拆；名字、编号、正文是 JSON 转义过的，照 JSON 读回。一行一条 `message.user`，`by` 是
+   `external qq:<号>`（拆不出的 `qq:unknown`），`venue` 那一格记 `msg`、`name`、`reply_to`、`mentions`、`mentions_me`、`show_ids`；
+   引用的原文接在正文后面一段。第一条引起这一轮，别的带这一轮的 `turn`、排在 `turn.started` 后面。一行都拆不出的整段一条
+   `qq:unknown`。
+3. 私聊：一条，`by` 是对方 `qq:<号>`。
+4. 被挤出上下文的轮：读 `state/personas/<scope>/memory/evicted_context.db`，照 `source_id` 的 `<turn_id>:<哪一句>` 拼成一轮，照
+   `origin_session_id` 插回原来的会话，和剩下的轮照人说话的时刻归并（两边各自的先后不变，同一时刻剩下的在前）。排着并进来的话
+   （`followup:`、`before:`）各一条带这一轮的 `message.user`，号、编号照正文后面的可信元数据，没有的 `qq:unknown`。原来的会话不在了
+   的、`origin_session_id` 是空的，照人格归进一个本机存档「旧版被挤出的对话」。
+
 ## 怎么验
 
 - 单元：编号（同输入同编号、时间段对）、时刻写法、每种轮拼出来的事件。
 - 进程里起真核心：造一个旧会话库（带附件、工具、中断、摘要行、隐藏行），迁进去，`view.page` 打得开、`session.list` 里是存档；
   再跑一遍全是 `present`。
-- 主人旧根的副本上演练两遍。
+- 主人旧根的副本上演练两遍。上：本机会话 85 个、178 轮。中：一共 118 个会话（本机 85、QQ 33）、3028 轮，被挤出的 2607 轮全部拼回
+  （和细则草稿 2 在拷贝上数的一样）；`qq:unknown` 6 条，都是被挤出的轮里没有可信元数据的 `before:` 行（旧版那时还不写），查过
+  正文里也没有别的号的写法。第二遍全是以前导过的。
 
 ## 坑
 

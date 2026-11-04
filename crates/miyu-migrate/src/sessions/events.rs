@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::ids;
 use super::old::{Session, Turn};
+use super::said::{Who, said};
 
 /// 旧版运行中那一轮的占位正文：不是她说的。
 const PENDING: &str = "<system-reminder>上一轮prompt正在由另一轮回复处理中，你只需要回应用户当前的prompt，不要处理上一轮的prompt</system-reminder>";
@@ -26,6 +27,8 @@ pub struct Head<'a> {
     pub policy: &'a str,
     /// 新人格编号。
     pub persona: Option<&'a str>,
+    /// 说话的是谁（本机的人、私聊的对方、群）。
+    pub who: Who<'a>,
 }
 
 /// 一个附件放进 blob 库以后的样子。
@@ -54,6 +57,10 @@ pub struct Built {
     pub attachments: u64,
     /// 没有工具流、只有展示转录的轮（工具细节留给后一步）。
     pub replay_only: u64,
+    /// 拼回来的被挤出的轮。
+    pub evicted: u64,
+    /// 群里拆不出号、写成 `qq:unknown` 的话。
+    pub unknown: u64,
 }
 
 #[derive(Deserialize)]
@@ -134,6 +141,9 @@ pub fn build(
     if let Some(persona) = head.persona {
         body["persona"] = json!(persona);
     }
+    if matches!(head.who, Who::Group(_)) {
+        body["confined"] = json!(true);
+    }
     log.push(("session.created", &last), None, person.clone(), None, body);
     let title: String = session.name.trim().chars().take(200).collect();
     if !title.is_empty() {
@@ -150,43 +160,50 @@ pub fn build(
             built.summaries += 1;
             continue;
         }
-        let said = ids::parse(&turn.user_timestamp).map_or_else(|| last.clone(), ids::at);
-        last.clone_from(&said);
+        let said_at = ids::parse(&turn.user_timestamp).map_or_else(|| last.clone(), ids::at);
+        last.clone_from(&said_at);
         let cause = format!("legacy-{}", turn.id);
         let cause = (cause.len() <= 128).then_some(cause.as_str());
-        let text = if turn.display_content.trim().is_empty() {
-            &turn.user_content
-        } else {
-            &turn.display_content
+        let (said_all, attached) = said(
+            head.venue,
+            head.who,
+            turn,
+            media.get(&turn.id).map_or(&[][..], Vec::as_slice),
+        );
+        built.attachments += attached;
+        built.unknown += said_all.iter().filter(|one| one.unknown).count() as u64;
+        built.evicted += u64::from(turn.evicted);
+        let mut said_all = said_all.into_iter();
+        let Some(first) = said_all.next() else {
+            continue;
         };
-        let mut blocks = Vec::new();
-        if !text.is_empty() {
-            blocks.push(json!({"type": "text", "text": text}));
-        }
-        for one in media.get(&turn.id).into_iter().flatten() {
-            blocks.push(block(one));
-            built.attachments += 1;
-        }
-        if blocks.is_empty() {
-            blocks.push(json!({"type": "text", "text": ""}));
-        }
         let trigger = log.push(
-            ("message.user", &said),
+            ("message.user", &said_at),
             None,
-            person.clone(),
+            first.by,
             cause,
-            json!({"blocks": blocks}),
+            first.body,
         );
         // `turn.started` 的 `turn` 是它自己的序号。
         let started = log.next();
         log.push(
-            ("turn.started", &said),
+            ("turn.started", &said_at),
             Some(started),
             json!({"kind": "kernel"}),
             cause,
             json!({"trigger": trigger}),
         );
-        let started_at = said.clone();
+        // 同一轮里别的话（群里别人说的、排着并进来的）：带这一轮的编号，排在开轮后面。
+        for more in said_all {
+            log.push(
+                ("message.user", &said_at),
+                Some(started),
+                more.by,
+                None,
+                more.body,
+            );
+        }
+        let started_at = said_at.clone();
         let model = json!({
             "kind": "model",
             "endpoint": nonempty(turn.provider.as_deref()),
@@ -317,26 +334,6 @@ pub fn build(
     }
     built.events = log.events;
     built
-}
-
-/// 一个附件的块：认出大小的图片写图片块，别的写文件块。
-fn block(media: &Media) -> Value {
-    match media.size {
-        Some((width, height)) => json!({
-            "type": "image",
-            "blob": media.blob,
-            "name": media.name,
-            "media_type": media.media_type,
-            "width": width,
-            "height": height,
-        }),
-        None => json!({
-            "type": "file",
-            "blob": media.blob,
-            "name": media.name,
-            "media_type": media.media_type,
-        }),
-    }
 }
 
 /// 最后的回复：运行中的占位当没有，中断时加的提示去掉。

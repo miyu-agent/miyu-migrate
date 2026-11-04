@@ -1,19 +1,22 @@
 //! 会话（细则第一节，施工 MG-3）：旧会话库里管理员的会话一个一个打成原始包、经 `session.import {archive: true}` 导成只读存档。
-//! 这一步（MG-3 上）只迁本机会话：绑了场所的（QQ）、子代理的留给后两步，一次性的 `ask`、成员的不迁，都在报告里数出来。
+//! 本机会话（MG-3 上）、QQ 场所会话（MG-3 中：私聊照原样，群的一轮照每行开头的号拆）；被挤出上下文的轮拼回原来的会话
+//! （[`evicted`]），原来的会话不在了的照人格归进一个兜底的本机存档。子代理的留给下一步，一次性的 `ask`、成员的不迁、别的平台的
+//! 整会话留在压缩包里，都在报告里数出来。
 //!
 //! 新编号由旧编号算出来（[`ids::session_id`]），重跑时导入回 `present`，不重复。
 
 mod events;
+pub mod evicted;
+pub mod group;
 pub mod ids;
+mod import;
 mod old;
+mod said;
 mod snapshot;
 mod stage;
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
-
-use serde_json::json;
 
 use miyu_client::places::DataRoot;
 
@@ -23,7 +26,9 @@ use crate::personas::Mapped;
 use crate::report::{Item, Skip, Status};
 
 pub use events::{Built, Head, Media, build};
-pub use old::{Attachment, Db, NEWEST, Session, Turn};
+pub use import::{Job, Owned};
+pub use old::{Attachment, Binding, Db, NEWEST, Session, Turn};
+pub use said::Who;
 pub use snapshot::{Snapshot, borrow};
 pub use stage::{Stage, StageError};
 
@@ -45,6 +50,10 @@ pub struct Counted {
     pub attachments: u64,
     /// 只有展示转录、工具细节没导的轮。
     pub replay_only: u64,
+    /// 拼回来的被挤出的轮。
+    pub evicted: u64,
+    /// 群里拆不出号的话。
+    pub unknown: u64,
 }
 
 /// 迁会话：读 `copy`（解出来的副本）的会话库，人格照 `mapped`，暂存在 `stage`，导进 `core`（数据根 `root`：借快照时读它的
@@ -81,8 +90,8 @@ pub fn migrate(
         item.note = Some("旧根里没有会话库。".to_string());
         return Ok(item);
     }
-    let db = match Db::open(&path).and_then(|db| Ok((db.sessions()?, db.bound()?, db))) {
-        Ok((sessions, bound, db)) if db.version <= NEWEST => (sessions, bound, db),
+    let db = match Db::open(&path).and_then(|db| Ok((db.sessions()?, db.bindings()?, db))) {
+        Ok((sessions, bindings, db)) if db.version <= NEWEST => (sessions, bindings, db),
         Ok((_, _, db)) => {
             return Ok(archived(
                 item,
@@ -94,11 +103,18 @@ pub fn migrate(
         }
         Err(error) => return Ok(archived(item, format!("会话库读不了：{error}"))),
     };
-    let (sessions, bound, db) = db;
+    let (sessions, bindings, db) = db;
     let stage = match Stage::new(stage) {
         Ok(stage) => stage,
         Err(error) => return Ok(archived(item, format!("暂存目录建不了：{error}"))),
     };
+    let (jobs, unreadable) = plan(
+        copy,
+        &source,
+        &db,
+        (&sessions, &bindings),
+        &mut item.skipped,
+    );
     let personas: HashMap<&str, Option<&str>> = mapped
         .iter()
         .map(|row| (row.old.as_str(), row.new.as_deref()))
@@ -106,26 +122,11 @@ pub fn migrate(
     let mut snapshots: HashMap<Option<String>, Snapshot> = HashMap::new();
     let mut counted = Counted::default();
     let mut unmapped = 0u64;
-    for session in &sessions {
-        let why = if !session.owner.is_empty() {
-            Some("member")
-        } else if session.kind == "ask" {
-            Some("oneshot")
-        } else if session.kind == "subagent" {
-            Some("subagent-later")
-        } else if bound.contains(&session.id) {
-            Some("venue-later")
-        } else {
-            None
-        };
-        if let Some(why) = why {
-            item.skipped.push(skip(&session.id, why));
-            continue;
-        }
-        let scope = if session.persona.is_empty() {
+    for job in &jobs {
+        let scope = if job.session.persona.is_empty() {
             "default"
         } else {
-            session.persona.as_str()
+            job.session.persona.as_str()
         };
         let persona = personas.get(scope).copied().flatten().map(str::to_string);
         if persona.is_none() {
@@ -139,13 +140,7 @@ pub fn migrate(
                 borrowed
             }
         };
-        match one(
-            core,
-            &db,
-            (copy, &source),
-            session,
-            (&stage, &snapshot, persona.as_deref()),
-        )? {
+        match import::one(core, copy, job, (&stage, &snapshot, persona.as_deref()))? {
             Ok((present, built)) => {
                 counted.sessions += 1;
                 counted.present += u64::from(present);
@@ -153,112 +148,133 @@ pub fn migrate(
                 counted.summaries += built.summaries;
                 counted.attachments += built.attachments;
                 counted.replay_only += built.replay_only;
+                counted.evicted += built.evicted;
+                counted.unknown += built.unknown;
             }
-            Err(why) => item.skipped.push(skip(&session.id, &why)),
+            Err(why) => item.skipped.push(skip(&job.session.id, &why)),
         }
     }
     item.migrated = counted.sessions;
-    if !item.skipped.is_empty() {
+    if !item.skipped.is_empty() || !unreadable.is_empty() {
         item.status = Status::Partial;
     }
-    item.note = Some(note(&counted, unmapped));
+    let mut text = note(&counted, unmapped);
+    if !unreadable.is_empty() {
+        text.push_str(&format!(
+            "被挤出上下文的库有 {} 个读不了（{}），留在压缩包里。",
+            unreadable.len(),
+            unreadable.join("、")
+        ));
+    }
+    item.note = Some(text);
     Ok(item)
 }
 
-/// 一个会话：拼、打包、导入。交回（早就在的吗、拼了什么）；这一个迁不成的交回为什么（一个短词，不带内容），连接断了的交回
-/// [`Said`]。
-fn one(
-    core: &mut dyn Core,
+/// 排出要导的会话：会话库里该导的，被挤出的轮拼回去；原来的会话不在了的（或者是空的 `origin_session_id`），照人格归进一个兜底
+/// 的本机存档。不导的记进 `skipped`。交回要导的，和读不了的被挤出的库（scope）。
+fn plan(
+    copy: &Layout,
+    source: &str,
     db: &Db,
-    (copy, source): (&Layout, &str),
-    session: &Session,
-    (stage, snapshot, persona): (&Stage, &Snapshot, Option<&str>),
-) -> Result<Result<(bool, Built), String>, Said> {
-    let Ok(turns) = db.turns(&session.id) else {
-        return Ok(Err("unreadable".to_string()));
-    };
-    let Ok(attachments) = db.attachments(&session.id) else {
-        return Ok(Err("unreadable".to_string()));
-    };
-    let mut media: HashMap<String, Vec<Media>> = HashMap::new();
-    for attachment in &attachments {
-        if let Some(one) = bytes(copy, attachment).and_then(|bytes| put(stage, attachment, &bytes))
-        {
-            media.entry(attachment.turn.clone()).or_default().push(one);
+    (sessions, bindings): (&[Session], &HashMap<String, Binding>),
+    skipped: &mut Vec<Skip>,
+) -> (Vec<Job>, Vec<String>) {
+    let personas = copy.state().join("personas");
+    let (found, unreadable) = evicted::read_all(&personas);
+    let mut evicted_of: HashMap<String, Vec<Turn>> = HashMap::new();
+    let mut leftover: Vec<(String, Vec<Turn>)> = Vec::new();
+    let known: HashMap<&str, &Session> =
+        sessions.iter().map(|one| (one.id.as_str(), one)).collect();
+    for (scope, by_origin) in found {
+        let mut orphans = Vec::new();
+        for (origin, turns) in by_origin {
+            if known.contains_key(origin.as_str()) {
+                evicted_of.entry(origin).or_default().extend(turns);
+            } else {
+                orphans.extend(turns);
+            }
+        }
+        if !orphans.is_empty() {
+            leftover.push((scope, orphans));
         }
     }
-    if stage.put(&snapshot.bytes).is_err() {
-        return Ok(Err("stage".to_string()));
-    }
-    let created = ids::parse(&session.created_at).map_or(0, |at| {
-        u64::try_from(at.as_millisecond()).unwrap_or_default()
-    });
-    let id = ids::session_id(created, source, &session.id);
-    let head = Head {
-        venue: "local",
-        policy: &snapshot.hash,
-        persona,
-    };
-    let built = build(&head, session, &turns, &media);
-    let exported = ids::parse(&session.updated_at)
-        .map_or_else(|| ids::at(jiff::Timestamp::UNIX_EPOCH), ids::at);
-    let bundle = match stage.bundle(&id, &built.events, &exported) {
-        Ok(bundle) => bundle,
-        Err(StageError::Event(seq, _)) => return Ok(Err(format!("bad-event-{seq}"))),
-        Err(StageError::Ledger(seq, _)) => return Ok(Err(format!("ledger-{seq}"))),
-        Err(_) => return Ok(Err("bundle".to_string())),
-    };
-    let path = std::path::absolute(&bundle).unwrap_or(bundle);
-    let imported = match core.call(
-        "session.import",
-        json!({"path": path.display().to_string(), "archive": true}),
-    ) {
-        Ok(imported) => imported,
-        Err(said) if matches!(said.code.as_str(), "io" | "disconnected" | "no_answer") => {
-            return Err(said);
+    let mut jobs = Vec::new();
+    for session in sessions {
+        let why = if !session.owner.is_empty() {
+            Some("member".to_string())
+        } else if session.kind == "ask" {
+            Some("oneshot".to_string())
+        } else if session.kind == "subagent" {
+            Some("subagent-later".to_string())
+        } else {
+            match bindings.get(&session.id) {
+                Some(binding) if binding.platform != "onebot" => {
+                    Some(format!("platform-{}", binding.platform))
+                }
+                _ => None,
+            }
+        };
+        if let Some(why) = why {
+            skipped.push(skip(&session.id, &why));
+            continue;
         }
-        Err(said) => return Ok(Err(format!("import-{}", said.code))),
-    };
-    let present = imported["present"]
-        .as_array()
-        .is_some_and(|list| list.iter().any(|one| one == id.as_str()));
-    Ok(Ok((present, built)))
-}
-
-/// 附件的字节：库里的，或者 `state/attachments/<编号>/<文件名>`。都没有的是 `None`。
-fn bytes(copy: &Layout, attachment: &Attachment) -> Option<Vec<u8>> {
-    if let Some(data) = &attachment.data {
-        return Some(data.clone());
+        let (venue, who) = match bindings.get(&session.id) {
+            Some(binding) => (
+                format!(
+                    "qq:{}:{}:{}",
+                    binding.account, binding.kind, binding.conversation
+                ),
+                if binding.kind == "group" {
+                    Owned::Group(binding.account.clone())
+                } else {
+                    Owned::Private(binding.conversation.clone())
+                },
+            ),
+            None => ("local".to_string(), Owned::Person),
+        };
+        let (Ok(turns), Ok(attachments)) = (db.turns(&session.id), db.attachments(&session.id))
+        else {
+            skipped.push(skip(&session.id, "unreadable"));
+            continue;
+        };
+        let turns = evicted::merge(turns, evicted_of.remove(&session.id).unwrap_or_default());
+        jobs.push(Job {
+            session: session.clone(),
+            turns,
+            attachments,
+            venue,
+            who,
+            source: source.to_string(),
+        });
     }
-    let name = Path::new(&attachment.file_name).file_name()?;
-    fs::read(
-        copy.state()
-            .join("attachments")
-            .join(&attachment.id)
-            .join(name),
-    )
-    .ok()
-}
-
-/// 附件放进暂存的 blob 库：图片认得出大小的写成图片。
-fn put(stage: &Stage, attachment: &Attachment, bytes: &[u8]) -> Option<Media> {
-    let blob = stage.put(bytes).ok()?;
-    let size = (attachment.kind == "image")
-        .then(|| imagesize::blob_size(bytes).ok())
-        .flatten()
-        .map(|size| (size.width as u64, size.height as u64))
-        .filter(|(width, height)| *width > 0 && *height > 0);
-    let media_type = if attachment.mime.trim().is_empty() {
-        "application/octet-stream".to_string()
-    } else {
-        attachment.mime.trim().to_string()
-    };
-    Some(Media {
-        blob,
-        name: attachment.file_name.clone(),
-        media_type,
-        size,
-    })
+    for (scope, turns) in leftover {
+        let first = turns
+            .first()
+            .map(|turn| turn.user_timestamp.clone())
+            .unwrap_or_default();
+        let last = turns
+            .last()
+            .map(|turn| turn.user_timestamp.clone())
+            .unwrap_or_default();
+        jobs.push(Job {
+            session: Session {
+                id: format!("evicted:{scope}"),
+                persona: scope.clone(),
+                name: "旧版被挤出的对话".to_string(),
+                kind: "user".to_string(),
+                owner: String::new(),
+                parent: None,
+                created_at: first,
+                updated_at: last,
+            },
+            turns,
+            attachments: Vec::new(),
+            venue: "local".to_string(),
+            who: Owned::Person,
+            source: format!("state/personas/{scope}/memory/evicted_context.db"),
+        });
+    }
+    (jobs, unreadable)
 }
 
 fn skip(key: &str, why: &str) -> Skip {
@@ -294,7 +310,19 @@ fn note(counted: &Counted, unmapped: u64) -> String {
             counted.replay_only
         ));
     }
-    note.push_str("绑了场所的（QQ）、子代理的会话下一步再迁。");
+    if counted.evicted > 0 {
+        note.push_str(&format!(
+            "被挤出上下文的 {} 轮拼回了原来的会话。",
+            counted.evicted
+        ));
+    }
+    if counted.unknown > 0 {
+        note.push_str(&format!(
+            "群里 {} 条话拆不出是谁说的，记成 qq:unknown。",
+            counted.unknown
+        ));
+    }
+    note.push_str("子代理的会话下一步再迁。");
     note
 }
 

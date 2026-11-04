@@ -24,7 +24,17 @@ fn png() -> Vec<u8> {
     bytes
 }
 
-/// 旧根（家目录布局）：会话库里六个会话，只有 `sess_local` 该导。
+/// 群里的一轮：新到的一条，随后补充的一条。
+const GROUP: &str = "[New messages received this turn]
+[09:00] 小李(QQ:222) [msg=10]: 在吗
+[Follow-up messages sent later by the same sender, in chronological order]
+[09:00] 小李(QQ:222) [msg=11]: 补一句";
+
+/// 被挤出的一轮群消息。
+const GROUP_EARLY: &str = "[New messages received this turn]
+[08:00] 老王(QQ:111) [msg=3]: 早上好";
+
+/// 旧根（家目录布局）：会话库里八个会话，本机的、QQ 群的、QQ 私聊的该导；被挤出的库里有拼回群会话的两轮、找不到会话的一轮。
 fn old_root() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join(".home-layout-v1"), "owner\n").unwrap();
@@ -42,7 +52,9 @@ fn old_root() -> tempfile::TempDir {
              display_content TEXT NOT NULL DEFAULT '', tool_flow TEXT, replay_journal TEXT);
          CREATE TABLE user_attachments (attachment_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, turn_id TEXT,
              file_name TEXT NOT NULL, mime TEXT NOT NULL, kind TEXT NOT NULL, data BLOB, created_at TEXT NOT NULL);
-         CREATE TABLE platform_session_bindings (session_id TEXT);",
+         CREATE TABLE platform_session_bindings (platform TEXT NOT NULL, account_id TEXT NOT NULL,
+             conversation_kind TEXT NOT NULL, conversation_id TEXT NOT NULL, persona TEXT NOT NULL,
+             session_id TEXT NOT NULL UNIQUE);",
     )
     .unwrap();
     let at = "2026-09-25T07:00:00.123456+00:00";
@@ -51,6 +63,8 @@ fn old_root() -> tempfile::TempDir {
         ("sess_ask", "ask", "", ""),
         ("sess_member", "user", "acct_1", ""),
         ("sess_qq", "user", "", ""),
+        ("sess_dm", "user", "", ""),
+        ("sess_tg", "user", "", ""),
         ("sess_child", "subagent", "", ""),
     ] {
         db.execute(
@@ -59,11 +73,96 @@ fn old_root() -> tempfile::TempDir {
         )
         .unwrap();
     }
+    for (session, platform, kind, conversation) in [
+        ("sess_qq", "onebot", "group", "555"),
+        ("sess_dm", "onebot", "private", "333"),
+        ("sess_tg", "telegram", "group", "1"),
+    ] {
+        db.execute(
+            "INSERT INTO platform_session_bindings VALUES (?1, '999', ?2, ?3, '', ?4)",
+            params![platform, kind, conversation, session],
+        )
+        .unwrap();
+    }
+    // 群会话里剩下的一轮在 09:00；被挤出的两轮一早一晚，归并以后夹着它。
     db.execute(
-        "INSERT INTO platform_session_bindings VALUES ('sess_qq')",
+        "INSERT INTO turns VALUES ('turn_q', 'sess_qq', 1, ?1, '2026-09-25T09:00:00+00:00', '收到', NULL, NULL, 'completed', 0, 0, NULL, NULL, '', NULL, NULL)",
+        params![GROUP],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO turns VALUES ('turn_d', 'sess_dm', 1, '私聊一句', '2026-09-25T09:00:00+00:00', '好', NULL, NULL, 'completed', 0, 0, NULL, NULL, '', NULL, NULL)",
         [],
     )
     .unwrap();
+    let evicted = dir.path().join("state/personas/default/memory");
+    std::fs::create_dir_all(&evicted).unwrap();
+    let evicted = Connection::open(evicted.join("evicted_context.db")).unwrap();
+    evicted
+        .execute_batch(
+            "CREATE TABLE evicted_turns (id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT, timestamp TEXT NOT NULL,
+                 role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL,
+                 origin_session_id TEXT NOT NULL DEFAULT '');",
+        )
+        .unwrap();
+    for (source, at, role, content, origin) in [
+        (
+            "turn_early:user",
+            "2026-09-25T08:00:00+00:00",
+            "user",
+            GROUP_EARLY,
+            "sess_qq",
+        ),
+        (
+            "turn_early:assistant",
+            "2026-09-25T08:00:05+00:00",
+            "assistant",
+            "早",
+            "sess_qq",
+        ),
+        (
+            "turn_early:followup:q1",
+            "2026-09-25T08:00:02+00:00",
+            "user",
+            "还有\n\nTrusted metadata for this QQ follow-up message: sender QQ=444; message ID=12",
+            "sess_qq",
+        ),
+        (
+            "turn_late:user",
+            "2026-09-25T10:00:00+00:00",
+            "user",
+            GROUP_EARLY,
+            "sess_qq",
+        ),
+        (
+            "turn_late:assistant",
+            "2026-09-25T10:00:05+00:00",
+            "assistant",
+            "晚",
+            "sess_qq",
+        ),
+        (
+            "turn_old:user",
+            "2026-09-01T10:00:00+00:00",
+            "user",
+            "很老的一句",
+            "",
+        ),
+        (
+            "turn_old:assistant",
+            "2026-09-01T10:00:05+00:00",
+            "assistant",
+            "很老的回答",
+            "",
+        ),
+    ] {
+        evicted
+            .execute(
+                "INSERT INTO evicted_turns (source_id, timestamp, role, content, created_at, origin_session_id) VALUES (?1, ?2, ?3, ?4, ?2, ?5)",
+                params![source, at, role, content, origin],
+            )
+            .unwrap();
+    }
     let flow = json!([{"assistant_content": "我看看", "calls": [
         {"id": "c", "name": "read", "arguments": "{\"path\":\"/x\"}", "output": "一只猫", "started_ms": 1u64, "finished_ms": 5u64}
     ]}])
@@ -149,7 +248,10 @@ fn local_sessions_become_archives_once() {
     let first =
         agent(&run::run(&plan(&fresh, old.path(), "2026-11-04T08:00:00Z"), &mut core).unwrap());
     let item = sessions_item(&first);
-    assert_eq!(item["migrated"], 1, "{item}");
+    assert_eq!(
+        item["migrated"], 4,
+        "本机、群、私聊、兜底的被挤出的：{item}"
+    );
     let skipped: Vec<(String, String)> = item["skipped"]
         .as_array()
         .unwrap()
@@ -168,8 +270,13 @@ fn local_sessions_become_archives_once() {
             ("sess_ask".to_string(), "oneshot".to_string()),
             ("sess_child".to_string(), "subagent-later".to_string()),
             ("sess_member".to_string(), "member".to_string()),
-            ("sess_qq".to_string(), "venue-later".to_string()),
+            ("sess_tg".to_string(), "platform-telegram".to_string()),
         ]
+    );
+    let note = item["note"].as_str().unwrap();
+    assert!(
+        note.contains("被挤出上下文的 3 轮拼回了原来的会话"),
+        "{note}"
     );
     let created = ids::parse("2026-09-25T07:00:00.123456+00:00")
         .unwrap()
@@ -188,8 +295,8 @@ fn local_sessions_become_archives_once() {
     assert_eq!(entry["title"], "看猫");
     assert_eq!(
         listed["sessions"].as_array().unwrap().len(),
-        1,
-        "临时会话删了"
+        2,
+        "本机的和兜底的被挤出的；场所会话不进列表，临时会话删了"
     );
 
     let page = core
@@ -239,16 +346,16 @@ fn local_sessions_become_archives_once() {
     let second =
         agent(&run::run(&plan(&fresh, old.path(), "2026-11-04T08:00:01Z"), &mut core).unwrap());
     let item = sessions_item(&second);
-    assert_eq!(item["migrated"], 1);
+    assert_eq!(item["migrated"], 4);
     assert!(
         item["note"]
             .as_str()
             .unwrap()
-            .contains("其中 1 个会话以前就导过"),
+            .contains("其中 4 个会话以前就导过"),
         "{item}"
     );
     let again = core.call("session.list", json!({})).unwrap();
-    assert_eq!(again["sessions"].as_array().unwrap().len(), 1, "什么都没多");
+    assert_eq!(again["sessions"].as_array().unwrap().len(), 2, "什么都没多");
 }
 
 /// 核心建日志目录、blob 目录只认数据根里面的：状态目录在数据根外面的（人自己指了别处）照样导得进。
@@ -266,6 +373,71 @@ fn a_state_folder_outside_the_data_root_still_imports() {
     );
     let done = agent(&run::run(&plan, &mut core).unwrap());
     let item = sessions_item(&done);
-    assert_eq!(item["migrated"], 1, "{item}");
+    assert_eq!(item["migrated"], 4, "{item}");
     assert_eq!(item["skipped"].as_array().unwrap().len(), 4, "{item}");
+}
+
+/// 数据根里会话 `id` 的日志，写成 JSON。
+fn logged(root: &miyu_store::root::DataRoot, id: &str) -> Vec<Value> {
+    let session = miyu_kernel::id::SessionId::parse(id).unwrap();
+    miyu_store::log::read_events(&root.session_dir(&session))
+        .unwrap()
+        .iter()
+        .map(|event| serde_json::to_value(event).unwrap())
+        .collect()
+}
+
+/// 群会话：被挤出的两轮照时刻夹着剩下的一轮；每条话是谁说的照每行开头的号；排着并进来的话照可信元数据。私聊是对方说的。
+#[test]
+fn venue_sessions_split_groups_and_take_back_evicted_turns() {
+    let fresh = fresh();
+    let old = old_root();
+    let mut core = connect(&fresh.root);
+    run::run(&plan(&fresh, old.path(), "2026-11-04T08:00:00Z"), &mut core).unwrap();
+    let created = ids::parse("2026-09-25T07:00:00.123456+00:00")
+        .unwrap()
+        .as_millisecond() as u64;
+    let group = ids::session_id(created, "home/owner/conversation.db", "sess_qq");
+    // 场所会话不给 `view.page`（只给本机会话）：照数据根里的日志读。
+    let events = logged(&fresh.root, &group);
+    assert_eq!(events[0]["body"]["venue"], "qq:999:group:555");
+    let said: Vec<(String, String)> = events
+        .iter()
+        .filter(|event| event["kind"] == "message.user")
+        .map(|event| {
+            (
+                event["by"]["id"].as_str().unwrap().to_string(),
+                event["body"]["blocks"][0]["text"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            )
+        })
+        .collect();
+    let pair = |id: &str, text: &str| (id.to_string(), text.to_string());
+    assert_eq!(
+        said,
+        vec![
+            pair("qq:111", "早上好"),
+            pair("qq:444", "还有"),
+            pair("qq:222", "在吗"),
+            pair("qq:222", "补一句"),
+            pair("qq:111", "早上好"),
+        ]
+    );
+    let replies: Vec<&str> = events
+        .iter()
+        .filter(|event| event["kind"] == "message.assistant")
+        .map(|event| event["body"]["blocks"][0]["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(replies, vec!["早", "收到", "晚"]);
+
+    let private = ids::session_id(created, "home/owner/conversation.db", "sess_dm");
+    let first = logged(&fresh.root, &private)
+        .iter()
+        .find(|event| event["kind"] == "message.user")
+        .unwrap()
+        .clone();
+    assert_eq!(first["by"]["id"], "qq:333");
+    assert_eq!(first["body"]["blocks"][0]["text"], "私聊一句");
 }

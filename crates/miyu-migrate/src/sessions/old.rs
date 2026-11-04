@@ -1,7 +1,7 @@
 //! 读旧会话库（`conversation.db`，调研「第二部分」）：照列名读，老库缺的列当 NULL；表都没有的当空的。库是解出来的副本，
 //! 照常打开（带着 WAL 的能读到），不往里写。
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, Row};
@@ -68,6 +68,23 @@ pub struct Turn {
     pub tool_flow: Option<String>,
     /// 展示用的转录（v17 起）。
     pub replay_journal: Option<String>,
+    /// 从被挤出的库拼回来的（只有字）。
+    pub evicted: bool,
+    /// 被挤出的轮里排着并进来的话（原文，带旧版的可信元数据那一段）。
+    pub followups: Vec<String>,
+}
+
+/// `platform_session_bindings` 的一行：会话绑在哪个场所。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    /// 平台：`onebot` 是 QQ。
+    pub platform: String,
+    /// 机器人的号。
+    pub account: String,
+    /// `group`、`private`。
+    pub kind: String,
+    /// 群号、对方的号。
+    pub conversation: String,
 }
 
 /// `user_attachments` 里挂在某一轮的一个附件。
@@ -171,18 +188,39 @@ impl Db {
         rows.collect()
     }
 
-    /// 绑了场所的会话（`platform_session_bindings`，没有这张表的是空的）。
+    /// 绑了场所的会话（`platform_session_bindings`，没有这张表的是空的）：会话的旧编号到绑在哪。
     ///
     /// # Errors
     ///
     /// 读不了。
-    pub fn bound(&self) -> rusqlite::Result<HashSet<String>> {
-        let Some(sql) = self.select("platform_session_bindings", &["session_id"], "")? else {
-            return Ok(HashSet::new());
+    pub fn bindings(&self) -> rusqlite::Result<HashMap<String, Binding>> {
+        let Some(sql) = self.select(
+            "platform_session_bindings",
+            &[
+                "session_id",
+                "platform",
+                "account_id",
+                "conversation_kind",
+                "conversation_id",
+            ],
+            "",
+        )?
+        else {
+            return Ok(HashMap::new());
         };
         let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map([], |row| row.get::<_, Option<String>>(0))?;
-        rows.filter_map(Result::transpose).collect()
+        let rows = statement.query_map([], |row| {
+            Ok((
+                text(row, 0)?,
+                Binding {
+                    platform: text(row, 1)?,
+                    account: text(row, 2)?,
+                    kind: text(row, 3)?,
+                    conversation: text(row, 4)?,
+                },
+            ))
+        })?;
+        rows.collect()
     }
 
     /// 会话 `session` 的轮，照 `seq` 排。
@@ -231,6 +269,8 @@ impl Db {
                 model: row.get(11)?,
                 tool_flow: row.get(12)?,
                 replay_journal: row.get(13)?,
+                evicted: false,
+                followups: Vec::new(),
             })
         })?;
         rows.collect()
