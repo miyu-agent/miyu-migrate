@@ -19,6 +19,10 @@ blake3.workspace = true
 tokio.workspace = true
 fs4.workspace = true
 miyu-client.workspace = true
+miyu-kernel.workspace = true
+miyu-store.workspace = true
+rusqlite.workspace = true
+imagesize.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -27,7 +31,6 @@ miyu-client = { workspace = true, features = ["testkit"] }
 miyu-endpoint.workspace = true
 miyu-session = { workspace = true, features = ["testkit"] }
 miyu-ipc.workspace = true
-miyu-store.workspace = true
 miyu-tool.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 

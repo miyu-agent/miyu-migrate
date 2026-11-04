@@ -21,6 +21,8 @@ pub struct Plan {
     pub state: PathBuf,
     /// 这一次的时刻：目录名、报告里写的。
     pub at: jiff::Timestamp,
+    /// 新版的数据根：借快照时读它的 blob 库。
+    pub root: miyu_client::places::DataRoot,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
 }
@@ -135,6 +137,8 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     let found =
         personas::read(&copy, &old.root).map_err(|error| RunError::Io(work.clone(), error))?;
     let mapped = personas::apply(core, &found.olds).map_err(RunError::Core)?;
+    let sessions = crate::sessions::migrate(core, &plan.root, &copy, &mapped, &dir.join("stage"))
+        .map_err(RunError::Core)?;
     let (files, bytes) = manifest.totals();
     let (_, sha256) =
         archive::hash_file(&packed).map_err(|error| RunError::Io(packed.clone(), error))?;
@@ -175,12 +179,17 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         }),
     });
     report.items.extend(persona_items(&mapped, &found.extras));
+    report.items.push(sessions);
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)
         .map_err(|error| RunError::Io(dir.clone(), error))?;
-    // 解出来的副本用完就删：留着的是压缩包、清单、报告。
+    // 解出来的副本、暂存的包用完就删：留着的是压缩包、清单、报告。
     fs::remove_dir_all(&work).map_err(|error| RunError::Io(work.clone(), error))?;
+    let stage = dir.join("stage");
+    if stage.exists() {
+        fs::remove_dir_all(&stage).map_err(|error| RunError::Io(stage.clone(), error))?;
+    }
     Ok(Done { human, agent })
 }
 

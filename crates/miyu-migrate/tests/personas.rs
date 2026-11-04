@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use miyu_migrate::core::{Core, Live};
 use miyu_migrate::personas::{LEGACY_PERSONA, parse_dialogs};
 use miyu_migrate::run::{self, Plan};
+use miyu_store::root::DataRoot;
 use support::{connect, fresh};
 
 /// 旧根（家目录布局）：一个自己建的人格「小猫」（带改过的示范对话），旧 Miyu 的角色扮演提示停用了。
@@ -34,11 +35,12 @@ fn old_root() -> tempfile::TempDir {
     dir
 }
 
-fn plan(old: &Path, state: PathBuf, at: &str) -> Plan {
+fn plan(root: &DataRoot, old: &Path, state: PathBuf, at: &str) -> Plan {
     Plan {
         old: old.to_path_buf(),
         state,
         at: at.parse().unwrap(),
+        root: root.clone(),
         space: run::free_space,
     }
 }
@@ -58,7 +60,12 @@ fn personas_land_in_the_core_once() {
     let state = fresh.root.path().join("var/lib/miyu-migrate");
     let mut core = connect(&fresh.root);
     let done = run::run(
-        &plan(old.path(), state.clone(), "2026-11-04T08:00:00Z"),
+        &plan(
+            &fresh.root,
+            old.path(),
+            state.clone(),
+            "2026-11-04T08:00:00Z",
+        ),
         &mut core,
     )
     .unwrap();
@@ -95,7 +102,11 @@ fn personas_land_in_the_core_once() {
     assert_eq!(read(&mut core, cat_id, "persona")["text"], "你是一只小猫。");
 
     let before = core.call("persona.list", json!({})).unwrap()["personas"].clone();
-    let again = run::run(&plan(old.path(), state, "2026-11-04T08:00:01Z"), &mut core).unwrap();
+    let again = run::run(
+        &plan(&fresh.root, old.path(), state, "2026-11-04T08:00:01Z"),
+        &mut core,
+    )
+    .unwrap();
     let agent: Value =
         serde_json::from_str(&std::fs::read_to_string(&again.agent).unwrap()).unwrap();
     for row in agent["personas"].as_array().unwrap() {

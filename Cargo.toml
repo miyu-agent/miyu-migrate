@@ -26,6 +26,12 @@ tokio = { version = "1", features = ["rt"] }
 fs4 = "0.13"
 # 新核心：连核心的门面，钉在一个提交上，核心改了格式跟着它的版本重编（细则第十四节）。
 miyu-client = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+# 事件、编号（Event::from_line 读一遍再写）；会话日志、blob 库、原始包（细则第十四节：清单、包都照核心的写法）。
+miyu-kernel = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+# 读旧会话库：SQLite，同核心一样自己带源码编（三个平台一样）。
+rusqlite = { version = "0.40", features = ["bundled"] }
+# 旧附件的图片认大小（图片块要宽高）。
+imagesize = "0.14"
 # 测试里在进程里起真核心（照 miyu-im 测试的起法），同一个提交。
 miyu-endpoint = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
 miyu-session = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }

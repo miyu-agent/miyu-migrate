@@ -55,6 +55,7 @@ fn main() -> ExitCode {
         old,
         state,
         at: jiff::Timestamp::now(),
+        root: root.clone(),
         space: run::free_space,
     };
     match run::run(&plan, &mut core) {

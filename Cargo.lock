@@ -493,7 +493,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1034,6 +1034,12 @@ dependencies = [
 
 [[package]]
 name = "imagesize"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09e54e57b4c48b40f7aec75635392b12b3421fa26fe8b4332e63138ed278459c"
+
+[[package]]
+name = "imagesize"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
@@ -1485,13 +1491,16 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "fs4",
+ "imagesize 0.14.0",
  "jiff",
  "miyu-client",
  "miyu-endpoint",
  "miyu-ipc",
+ "miyu-kernel",
  "miyu-session",
  "miyu-store",
  "miyu-tool",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -1651,7 +1660,7 @@ version = "0.0.0"
 source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
 dependencies = [
  "image",
- "imagesize",
+ "imagesize 0.15.0",
  "miyu-config",
  "miyu-drivers",
  "miyu-fs",
@@ -2007,7 +2016,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2187,7 +2196,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2570,7 +2579,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3051,7 +3060,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

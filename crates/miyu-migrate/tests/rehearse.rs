@@ -24,13 +24,22 @@ use miyu_migrate::run::{self, Plan};
 fn summary(agent: &Value) -> String {
     let mut out = String::new();
     for item in agent["items"].as_array().unwrap() {
+        let mut whys: BTreeMap<String, usize> = BTreeMap::new();
+        for skip in item["skipped"].as_array().into_iter().flatten() {
+            *whys
+                .entry(skip["why"].as_str().unwrap().to_string())
+                .or_default() += 1;
+        }
         out.push_str(&format!(
-            "  {} {}：迁了 {}，跳过 {}\n",
+            "  {} {}：迁了 {}，跳过 {whys:?}\n",
             item["what"].as_str().unwrap(),
             item["status"].as_str().unwrap(),
             item["migrated"],
-            item["skipped"].as_array().map_or(0, Vec::len),
         ));
+        // 补充只有条数（拼的时候就不带内容）。
+        if let Some(note) = item["note"].as_str() {
+            out.push_str(&format!("    {note}\n"));
+        }
     }
     let mut hows: BTreeMap<String, usize> = BTreeMap::new();
     for row in agent["personas"].as_array().unwrap() {
@@ -59,6 +68,7 @@ fn rehearse() {
         old: old.clone(),
         state: state.clone(),
         at: at.parse().unwrap(),
+        root: fresh.root.clone(),
         space: run::free_space,
     };
     let first = run::run(&plan("2026-11-04T08:00:00Z"), &mut core).unwrap();
