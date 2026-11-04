@@ -1,4 +1,4 @@
-//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆、配置、表情包）、
+//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆、配置、表情包、技能和脚本）、
 //! 出报告。
 
 use std::fmt;
@@ -202,6 +202,10 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     report
         .items
         .push(crate::memes::migrate(core, &copy, &dir).map_err(RunError::Core)?);
+    let moved = crate::skills::migrate(&copy, plan.root.path());
+    report
+        .items
+        .extend([moved.skills, moved.scripts, moved.packages]);
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)

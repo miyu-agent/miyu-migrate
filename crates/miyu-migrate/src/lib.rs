@@ -14,3 +14,4 @@ pub mod report;
 pub mod run;
 pub mod sessions;
 pub mod settings;
+pub mod skills;
