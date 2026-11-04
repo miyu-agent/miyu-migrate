@@ -7,6 +7,7 @@ pub mod files;
 pub mod jsonc;
 pub mod knowledge;
 pub mod layout;
+pub mod leftovers;
 pub mod lock;
 pub mod logins;
 pub mod memes;

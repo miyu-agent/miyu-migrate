@@ -6,6 +6,8 @@
 //!     cargo test --test rehearse -- --ignored --nocapture
 //! ```
 //!
+//! 给了 `MIYU_MIGRATE_HOME` 的，报告照它看数据根外面旧版装过的（只看在不在）。
+//!
 //! 副本要先去掉 `config/config.jsonc` 里的 key、删掉 `daemon.lock`；演完新数据根自己删，副本由演练的人删。
 //!
 //! QQ 消息记录：给了 `MIYU_MIGRATE_IM`（im 的程序）的，照真的 im 导进 `MIYU_MIGRATE_IM_STATE`（im 的状态目录，放 `records.db`；
@@ -95,6 +97,7 @@ fn rehearse() {
         at: at.parse().unwrap(),
         root: fresh.root.clone(),
         records: im(&fresh.root),
+        home: std::env::var_os("MIYU_MIGRATE_HOME").map(PathBuf::from),
         space: run::free_space,
     };
     let first = run::run(&plan("2026-11-04T08:00:00Z"), &mut core).unwrap();

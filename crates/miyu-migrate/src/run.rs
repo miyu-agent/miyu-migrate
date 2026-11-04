@@ -1,4 +1,4 @@
-//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆、配置、表情包、技能和脚本、知识库、文件、登录态、赞助）、
+//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆、配置、表情包、技能和脚本、知识库、文件、登录态、赞助、零碎）、
 //! 出报告。
 
 use std::fmt;
@@ -26,6 +26,8 @@ pub struct Plan {
     pub root: miyu_client::places::DataRoot,
     /// QQ 消息记录交 im 导（真跑的是 `miyu im records import`）。
     pub records: crate::records::Importer,
+    /// 这台机器的家目录：报告看数据根外面旧版装过的东西（测试不写）。
+    pub home: Option<PathBuf>,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
 }
@@ -218,6 +220,9 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     report
         .items
         .push(crate::sponsors::migrate(core, &copy).map_err(RunError::Core)?);
+    report
+        .items
+        .extend(crate::leftovers::items(&copy, plan.home.as_deref()));
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)

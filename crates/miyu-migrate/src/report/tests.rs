@@ -114,3 +114,50 @@ fn both_reports_land_in_the_folder() {
     assert_eq!(agent.file_name().unwrap(), "给agent.json");
     assert!(std::fs::read_to_string(agent).unwrap().ends_with("}\n"));
 }
+
+#[test]
+fn derived_things_fold_into_one_line_and_the_old_root_comes_last() {
+    let mut report = sample();
+    for what in ["derived/logs", "derived/cache"] {
+        report.items.push(Item {
+            what: what.to_string(),
+            status: Status::Skipped,
+            source: "logs".to_string(),
+            format: "日志".to_string(),
+            migrated: 0,
+            skipped: Vec::new(),
+            target: None,
+            note: None,
+        });
+    }
+    report.items.push(Item {
+        what: "outside/.local/bin/miyu".to_string(),
+        status: Status::Skipped,
+        source: "~/.local/bin/miyu".to_string(),
+        format: "数据根外面".to_string(),
+        migrated: 0,
+        skipped: Vec::new(),
+        target: None,
+        note: Some("这是新版的包装脚本，不是旧版的，别删。".to_string()),
+    });
+    let human = report.human();
+    assert!(!human.contains("### derived/"), "派生的不一条条列：{human}");
+    assert!(human.contains("### 派生的缓存\n\n2 处"), "{human}");
+    assert!(human.contains("## 数据根外面\n\n旧版在数据根外面装过这些，不在压缩包里：\n\n- `~/.local/bin/miyu`：这是新版的包装脚本"), "{human}");
+    let last = &human[human.find("## 旧数据根").expect("有旧数据根那一节")..];
+    assert!(
+        last.contains("`/home/a/.miyu-0.7` 迁移一个字节都没动"),
+        "{last}"
+    );
+    assert!(
+        last.contains(&"ab".repeat(32)),
+        "带压缩包的 SHA-256：{last}"
+    );
+    assert!(last.contains("删由你自己来"), "{last}");
+    assert!(!last[2..].contains("\n## "), "是最后一节");
+    let agent = report.agent().unwrap();
+    assert!(
+        agent.contains("derived/logs") && agent.contains("derived/cache"),
+        "给 agent 的那份照样逐条"
+    );
+}

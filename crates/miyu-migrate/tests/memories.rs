@@ -75,6 +75,7 @@ fn facts_land_in_the_mapped_persona_once() {
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: fresh.root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
+        home: None,
         space: run::free_space,
     };
     let done = run::run(&plan, &mut core).unwrap();

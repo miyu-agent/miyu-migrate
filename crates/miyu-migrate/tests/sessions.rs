@@ -218,6 +218,7 @@ fn plan_in(fresh: &support::Fresh, old: &Path, at: &str, state: std::path::PathB
         at: at.parse().unwrap(),
         root: fresh.root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
+        home: None,
         space: run::free_space,
     }
 }

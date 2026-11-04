@@ -42,6 +42,7 @@ fn plan(root: &DataRoot, old: &Path, state: PathBuf, at: &str) -> Plan {
         at: at.parse().unwrap(),
         root: root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
+        home: None,
         space: run::free_space,
     }
 }

@@ -148,8 +148,8 @@ impl Report {
         );
         if let Some(archive) = &self.archive {
             out.push_str(&format!(
-                "旧目录整个打成了压缩包：`{}`（{} 个文件，SHA-256 `{}`）。确认新版用着没问题以后，可以删掉旧目录，只留这个包。\n\n",
-                archive.path, archive.files, archive.sha256
+                "旧目录整个打成了压缩包：`{}`。最后一节「旧数据根」写了什么时候可以删旧目录。\n\n",
+                archive.path
             ));
         }
         if !self.personas.is_empty() {
@@ -176,7 +176,22 @@ impl Report {
             out.push('\n');
         }
         out.push_str("## 每一类\n\n");
-        for item in &self.items {
+        // 派生的、数据根外面的另外写：派生的合成一行，数据根外面的单独一节。给 agent 的那份照样逐条。
+        let derived = self
+            .items
+            .iter()
+            .filter(|item| item.what.starts_with("derived/"))
+            .count();
+        let outside: Vec<&Item> = self
+            .items
+            .iter()
+            .filter(|item| item.what.starts_with("outside/"))
+            .collect();
+        for item in self
+            .items
+            .iter()
+            .filter(|item| !item.what.starts_with("derived/") && !item.what.starts_with("outside/"))
+        {
             out.push_str(&format!(
                 "### {}\n\n{}，{} 条",
                 item.what,
@@ -195,6 +210,22 @@ impl Report {
             }
             out.push('\n');
         }
+        if derived > 0 {
+            out.push_str(&format!(
+                "### 派生的缓存\n\n{derived} 处（日志、缓存、知识库的向量这些）不迁，新版自己重建；给 agent 的那份逐条列着。\n\n"
+            ));
+        }
+        if !outside.is_empty() {
+            out.push_str("## 数据根外面\n\n旧版在数据根外面装过这些，不在压缩包里：\n\n");
+            for item in outside {
+                out.push_str(&format!(
+                    "- `{}`：{}\n",
+                    item.source,
+                    item.note.as_deref().unwrap_or_default()
+                ));
+            }
+            out.push('\n');
+        }
         let left: Vec<&Item> = self
             .items
             .iter()
@@ -208,7 +239,23 @@ impl Report {
                     item.what, item.source, item.format
                 ));
             }
+            out.push('\n');
         }
+        out.push_str(&format!(
+            "## 旧数据根\n\n旧数据目录 `{}` 迁移一个字节都没动。",
+            self.old_root.path
+        ));
+        if let Some(archive) = &self.archive {
+            out.push_str(&format!(
+                "完整的压缩包在 `{}`：{} 个文件、原来一共 {}，整个包的 SHA-256 是 `{}`；逐文件的清单在 `{}`。",
+                archive.path,
+                archive.files,
+                crate::leftovers::human_size(archive.bytes),
+                archive.sha256,
+                archive.manifest
+            ));
+        }
+        out.push_str("确认都迁过来了、新版用了一阵没问题以后，再删旧数据目录（压缩包留着）；删由你自己来，迁移程序不删。\n");
         out
     }
 

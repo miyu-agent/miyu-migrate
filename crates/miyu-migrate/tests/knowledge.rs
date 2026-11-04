@@ -60,6 +60,7 @@ fn documents_land_in_a_base_the_core_reads() {
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: fresh.root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
+        home: None,
         space: run::free_space,
     };
     let done = run::run(&plan, &mut core).unwrap();

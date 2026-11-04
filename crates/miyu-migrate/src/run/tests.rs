@@ -43,6 +43,7 @@ fn plan(old: &Path, state: &Path) -> Plan {
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: miyu_client::places::DataRoot::at(state.join("new-root")),
         records: crate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
+        home: None,
         space: plenty,
     }
 }
@@ -115,6 +116,7 @@ fn too_little_room_stops_before_packing() {
     let old = old_root();
     let state = tempfile::tempdir().unwrap();
     let tight_plan = Plan {
+        home: None,
         space: tight,
         ..plan(old.path(), state.path())
     };

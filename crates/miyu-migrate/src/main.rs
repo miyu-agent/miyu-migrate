@@ -57,6 +57,7 @@ fn main() -> ExitCode {
         state,
         at: jiff::Timestamp::now(),
         root: root.clone(),
+        home: std::env::home_dir(),
         records,
         space: run::free_space,
     };
