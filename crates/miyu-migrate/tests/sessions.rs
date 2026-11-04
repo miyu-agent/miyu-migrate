@@ -13,16 +13,7 @@ use serde_json::{Value, json};
 use miyu_migrate::core::Core;
 use miyu_migrate::run::{self, Plan};
 use miyu_migrate::sessions::ids;
-use support::{connect, fresh};
-
-/// 一张 2×3 的 PNG 的头（认大小只读到 IHDR）。
-fn png() -> Vec<u8> {
-    let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
-    bytes.extend_from_slice(&2u32.to_be_bytes());
-    bytes.extend_from_slice(&3u32.to_be_bytes());
-    bytes.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
-    bytes
-}
+use support::{connect, fresh, logged, png};
 
 /// 群里的一轮：新到的一条，随后补充的一条。
 const GROUP: &str = "[New messages received this turn]
@@ -263,14 +254,14 @@ fn local_sessions_become_archives_once() {
             )
         })
         .collect();
-    // 创建时刻一样的照旧编号排。
+    // 创建时刻一样的照旧编号排；子代理排完主会话才挂，这一个没有父会话。
     assert_eq!(
         skipped,
         vec![
             ("sess_ask".to_string(), "oneshot".to_string()),
-            ("sess_child".to_string(), "subagent-later".to_string()),
             ("sess_member".to_string(), "member".to_string()),
             ("sess_tg".to_string(), "platform-telegram".to_string()),
+            ("sess_child".to_string(), "orphan-subagent".to_string()),
         ]
     );
     let note = item["note"].as_str().unwrap();
@@ -375,16 +366,6 @@ fn a_state_folder_outside_the_data_root_still_imports() {
     let item = sessions_item(&done);
     assert_eq!(item["migrated"], 4, "{item}");
     assert_eq!(item["skipped"].as_array().unwrap().len(), 4, "{item}");
-}
-
-/// 数据根里会话 `id` 的日志，写成 JSON。
-fn logged(root: &miyu_store::root::DataRoot, id: &str) -> Vec<Value> {
-    let session = miyu_kernel::id::SessionId::parse(id).unwrap();
-    miyu_store::log::read_events(&root.session_dir(&session))
-        .unwrap()
-        .iter()
-        .map(|event| serde_json::to_value(event).unwrap())
-        .collect()
 }
 
 /// 群会话：被挤出的两轮照时刻夹着剩下的一轮；每条话是谁说的照每行开头的号；排着并进来的话照可信元数据。私聊是对方说的。

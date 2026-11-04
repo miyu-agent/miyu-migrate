@@ -4,13 +4,13 @@
 //! 一轮：`message.user`（人说的字、附件）→ `turn.started` → 工具流每一轮一条 `message.assistant`，每个调用一条 `tool.result`
 //! → 最后的回复 → `turn.ended`。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::ids;
 use super::old::{Session, Turn};
+use super::rounds::{self, Round};
 use super::said::{Who, said};
 
 /// 旧版运行中那一轮的占位正文：不是她说的。
@@ -29,6 +29,8 @@ pub struct Head<'a> {
     pub persona: Option<&'a str>,
     /// 说话的是谁（本机的人、私聊的对方、群）。
     pub who: Who<'a>,
+    /// 子会话的父会话（新编号）和深度。
+    pub parent: Option<(&'a str, u64)>,
 }
 
 /// 一个附件放进 blob 库以后的样子。
@@ -42,6 +44,17 @@ pub struct Media {
     pub media_type: String,
     /// 图片的宽高；不是图片、认不出大小的是 `None`（写成文件块）。
     pub size: Option<(u64, u64)>,
+}
+
+/// 一个会话里接在别处的块：人说的话后面的附件、工具结果后面的图和文件、提问。都照旧编号。
+#[derive(Debug, Clone, Default)]
+pub struct Attached {
+    /// 人说的话的附件：turn_id → 几个。
+    pub user: HashMap<String, Vec<Media>>,
+    /// 工具结果后面接的块（图、文件、没迁过来的那一句）：(turn_id, 调用的旧编号) → 几块。
+    pub tools: HashMap<(String, String), Vec<Value>>,
+    /// 提问：turn_id → 每一次的 JSON。
+    pub questions: HashMap<String, Vec<Value>>,
 }
 
 /// 拼好的一个会话。
@@ -61,30 +74,12 @@ pub struct Built {
     pub evicted: u64,
     /// 群里拆不出号、写成 `qq:unknown` 的话。
     pub unknown: u64,
-}
-
-#[derive(Deserialize)]
-struct Round {
-    #[serde(default)]
-    assistant_content: String,
-    #[serde(default)]
-    assistant_reasoning: Option<String>,
-    #[serde(default)]
-    calls: Vec<Call>,
-}
-
-#[derive(Deserialize)]
-struct Call {
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    arguments: String,
-    #[serde(default)]
-    output: String,
-    #[serde(default)]
-    started_ms: Option<u64>,
-    #[serde(default)]
-    finished_ms: Option<u64>,
+    /// 工具结果后面接的块（图、文件）。
+    pub tool_blocks: u64,
+    /// 提问。
+    pub questions: u64,
+    /// 工具的附带对不上调用、没接上的（拼的人数，[`super::import`] 填）。
+    pub unplaced: u64,
 }
 
 /// 拼事件用的：照先后编序号。
@@ -120,13 +115,8 @@ impl Log {
     }
 }
 
-/// 拼一个会话：`turns` 照 `seq` 排好，`media` 是每一轮的附件（照旧编号）。时刻读不懂的照前一条的。
-pub fn build(
-    head: &Head<'_>,
-    session: &Session,
-    turns: &[Turn],
-    media: &HashMap<String, Vec<Media>>,
-) -> Built {
+/// 拼一个会话：`turns` 照先后排好，`attached` 是接在别处的块（照旧编号）。时刻读不懂的照前一条的。
+pub fn build(head: &Head<'_>, session: &Session, turns: &[Turn], attached: &Attached) -> Built {
     let mut log = Log { events: Vec::new() };
     let mut built = Built::default();
     let created = ids::parse(&session.created_at).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
@@ -143,6 +133,10 @@ pub fn build(
     }
     if matches!(head.who, Who::Group(_)) {
         body["confined"] = json!(true);
+    }
+    if let Some((parent, depth)) = head.parent {
+        body["parent"] = json!(parent);
+        body["depth"] = json!(depth);
     }
     log.push(("session.created", &last), None, person.clone(), None, body);
     let title: String = session.name.trim().chars().take(200).collect();
@@ -164,13 +158,13 @@ pub fn build(
         last.clone_from(&said_at);
         let cause = format!("legacy-{}", turn.id);
         let cause = (cause.len() <= 128).then_some(cause.as_str());
-        let (said_all, attached) = said(
+        let (said_all, attached_now) = said(
             head.venue,
             head.who,
             turn,
-            media.get(&turn.id).map_or(&[][..], Vec::as_slice),
+            attached.user.get(&turn.id).map_or(&[][..], Vec::as_slice),
         );
-        built.attachments += attached;
+        built.attachments += attached_now;
         built.unknown += said_all.iter().filter(|one| one.unknown).count() as u64;
         built.evicted += u64::from(turn.evicted);
         let mut said_all = said_all.into_iter();
@@ -209,21 +203,30 @@ pub fn build(
             "endpoint": nonempty(turn.provider.as_deref()),
             "model": nonempty(turn.model.as_deref()),
         });
-        let rounds: Vec<Round> = turn
-            .tool_flow
-            .as_deref()
-            .and_then(|flow| serde_json::from_str(flow).ok())
-            .unwrap_or_default();
+        let mut rounds: Vec<Round> = rounds::from_flow(turn.tool_flow.as_deref());
         if rounds.is_empty()
             && turn
                 .replay_journal
                 .as_deref()
                 .is_some_and(|j| j.contains("tool_call"))
         {
+            rounds = rounds::from_replay(turn.replay_journal.as_deref());
             built.replay_only += 1;
+        }
+        // 最后一次来回说的、想的：最后的回复和它一样的不再写一遍。提问接在后面，不算。
+        let last_said = rounds.last().map(|round| {
+            (
+                round.assistant_content.clone(),
+                round.assistant_reasoning.clone(),
+            )
+        });
+        for exchange in attached.questions.get(&turn.id).into_iter().flatten() {
+            rounds.push(rounds::question(exchange));
+            built.questions += 1;
         }
         let failed = failures(turn.replay_journal.as_deref());
         let mut seen_names: HashMap<String, usize> = HashMap::new();
+        let mut bridged = bridged(attached, &turn.id);
         for round in &rounds {
             let seq = log.next();
             let mut blocks = Vec::new();
@@ -255,6 +258,7 @@ pub fn build(
             );
             for (call, id) in round.calls.iter().zip(&calls) {
                 let nth = seen_names.entry(call.name.clone()).or_default();
+                // 成没成照展示转录里同名的第几次（工具流里没有这一格；只有转录的轮也照它）。
                 let status = if failed
                     .get(&call.name)
                     .is_some_and(|list| list.get(*nth) == Some(&false))
@@ -268,11 +272,18 @@ pub fn build(
                     .finished_ms
                     .and_then(ids::at_millis)
                     .unwrap_or_else(|| started_at.clone());
-                let mut body = json!({
-                    "call_id": id,
-                    "status": status,
-                    "blocks": [{"type": "text", "text": call.output}],
+                let mut blocks = vec![json!({"type": "text", "text": call.output})];
+                let direct = attached.tools.get(&(turn.id.clone(), call.id.clone()));
+                let more = direct.cloned().or_else(|| {
+                    bridged
+                        .get_mut(&call.name)
+                        .and_then(|queue| queue.pop_front())
                 });
+                if let Some(more) = more {
+                    built.tool_blocks += more.len() as u64;
+                    blocks.extend(more);
+                }
+                let mut body = json!({"call_id": id, "status": status, "blocks": blocks});
                 if let (Some(start), Some(end)) = (call.started_ms, call.finished_ms) {
                     body["duration_ms"] = json!(end.saturating_sub(start));
                 }
@@ -291,20 +302,20 @@ pub fn build(
             .and_then(ids::parse)
             .map_or_else(|| started_at.clone(), ids::at);
         let content = reply(&turn.assistant_content);
-        let last_round = rounds.last().map(|round| round.assistant_content.as_str());
+        let (last_text, last_thought) = match &last_said {
+            Some((text, thought)) => (Some(text.as_str()), thought.as_deref()),
+            None => (None, None),
+        };
         let mut blocks = Vec::new();
         if let Some(reasoning) = turn
             .assistant_reasoning
             .as_deref()
             .filter(|r| !r.is_empty())
-            && rounds
-                .last()
-                .and_then(|round| round.assistant_reasoning.as_deref())
-                != Some(reasoning)
+            && last_thought != Some(reasoning)
         {
             blocks.push(json!({"type": "reasoning", "text": reasoning}));
         }
-        if !content.is_empty() && last_round != Some(content) {
+        if !content.is_empty() && last_text != Some(content) {
             blocks.push(json!({"type": "text", "text": content}));
         }
         if !blocks.is_empty() {
@@ -334,6 +345,32 @@ pub fn build(
     }
     built.events = log.events;
     built
+}
+
+/// 旧版接入 QQ 的工具（表情包这些）出的图，`tool_id` 是 `bridge_<工具名>_<这一次调用里第几张>`，对不上调用的编号：照工具名排成
+/// 队，一张一份，这一轮里同名的调用照先后一次领一份。一次调用出了好几张的（第 2 张起）拼不回是哪一次的，照先后接着领；主人那份
+/// 15 张都是第 1 张。
+fn bridged(attached: &Attached, turn: &str) -> HashMap<String, VecDeque<Vec<Value>>> {
+    let mut found: Vec<(&str, &str, &Vec<Value>)> = attached
+        .tools
+        .iter()
+        .filter(|((owner, _), _)| owner == turn)
+        .filter_map(|((_, call), blocks)| {
+            let rest = call.strip_prefix("bridge_")?;
+            let (name, nth) = rest.rsplit_once('_')?;
+            nth.bytes()
+                .all(|b| b.is_ascii_digit())
+                .then_some((name, nth, blocks))
+        })
+        .collect();
+    found.sort_by(|left, right| (left.0, left.1).cmp(&(right.0, right.1)));
+    let mut queues: HashMap<String, VecDeque<Vec<Value>>> = HashMap::new();
+    for (name, _, blocks) in found {
+        // 同一个编号下的几张（每次调用都是第 1 张）照出的先后。
+        let queue = queues.entry(name.to_string()).or_default();
+        queue.extend(blocks.iter().map(|block| vec![block.clone()]));
+    }
+    queues
 }
 
 /// 最后的回复：运行中的占位当没有，中断时加的提示去掉。

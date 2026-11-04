@@ -12,6 +12,7 @@ use miyu_session::testkit::Script;
 use miyu_store::env::{Env, Platform};
 use miyu_store::resources::ResourceRoot;
 use miyu_store::root::DataRoot;
+use serde_json::Value;
 
 /// 新版的数据根，核心在一条自己的线程里跑着。
 pub struct Fresh {
@@ -73,4 +74,23 @@ pub fn connect(root: &DataRoot) -> Live {
         std::process::Command::new("miyu-core-is-already-running")
     })
     .unwrap()
+}
+
+/// 一张 2×3 的 PNG 的头（认大小只读到 IHDR）。
+pub fn png() -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    bytes.extend_from_slice(&2u32.to_be_bytes());
+    bytes.extend_from_slice(&3u32.to_be_bytes());
+    bytes.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    bytes
+}
+
+/// 数据根里会话 `id` 的日志，写成 JSON。
+pub fn logged(root: &DataRoot, id: &str) -> Vec<Value> {
+    let session = miyu_kernel::id::SessionId::parse(id).unwrap();
+    miyu_store::log::read_events(&root.session_dir(&session))
+        .unwrap()
+        .iter()
+        .map(|event| serde_json::to_value(event).unwrap())
+        .collect()
 }

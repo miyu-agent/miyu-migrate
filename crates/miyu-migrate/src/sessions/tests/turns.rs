@@ -11,7 +11,7 @@ use super::{HEAD, kinds, ledger_ok, session, turn};
 fn a_plain_turn_is_said_started_replied_and_ended() {
     let mut first = turn("turn_a", 1);
     first.display_content = "给人看的".to_string();
-    let built = build(&HEAD, &session("  旧名字 "), &[first], &HashMap::new());
+    let built = build(&HEAD, &session("  旧名字 "), &[first], &Attached::default());
     let events = &built.events;
     assert_eq!(
         kinds(events),
@@ -64,7 +64,7 @@ fn tool_rounds_become_calls_and_results_and_failures_are_errors() {
         ])
         .to_string(),
     );
-    let built = build(&HEAD, &session(""), &[one], &HashMap::new());
+    let built = build(&HEAD, &session(""), &[one], &Attached::default());
     let events = &built.events;
     assert_eq!(
         kinds(events),
@@ -120,7 +120,7 @@ fn interrupted_running_and_summary_turns() {
         &HEAD,
         &session(""),
         &[cut, summary, running],
-        &HashMap::new(),
+        &Attached::default(),
     );
     let events = &built.events;
     assert_eq!(
@@ -164,7 +164,15 @@ fn attachments_follow_the_words() {
             },
         ],
     )]);
-    let built = build(&HEAD, &session(""), &[turn("turn_a", 1)], &media);
+    let built = build(
+        &HEAD,
+        &session(""),
+        &[turn("turn_a", 1)],
+        &Attached {
+            user: media,
+            ..Attached::default()
+        },
+    );
     ledger_ok(&built.events);
     let blocks = &built.events[1]["body"]["blocks"];
     assert_eq!(blocks[1]["type"], "image");
@@ -182,7 +190,12 @@ fn the_stage_bundles_good_logs_and_refuses_what_the_ledger_refuses() {
     let dir = tempfile::tempdir().unwrap();
     let stage = Stage::new(dir.path()).unwrap();
     let id = ids::session_id(1_700_000_000_000, "home/a/conversation.db", "sess_1");
-    let built = build(&HEAD, &session(""), &[turn("turn_a", 1)], &HashMap::new());
+    let built = build(
+        &HEAD,
+        &session(""),
+        &[turn("turn_a", 1)],
+        &Attached::default(),
+    );
     let bundle = stage
         .bundle(&id, &built.events, "2026-09-25T08:00:00.000Z")
         .unwrap();
@@ -211,7 +224,7 @@ fn a_last_round_that_is_the_reply_is_not_said_twice() {
         ])
         .to_string(),
     );
-    let built = build(&HEAD, &session(""), &[one], &HashMap::new());
+    let built = build(&HEAD, &session(""), &[one], &Attached::default());
     let replies: Vec<&Value> = built
         .events
         .iter()
@@ -227,4 +240,40 @@ fn a_last_round_that_is_the_reply_is_not_said_twice() {
         json!([{"type": "text", "text": "好了"}])
     );
     ledger_ok(&built.events);
+}
+
+#[test]
+fn bridge_images_go_to_same_name_calls_in_order() {
+    let mut one = turn("turn_a", 1);
+    one.tool_flow = Some(
+        json!([{"calls": [
+            {"id": "a", "name": "use_meme", "arguments": "{}", "output": "一"},
+            {"id": "b", "name": "search", "arguments": "{}", "output": "搜"},
+            {"id": "c", "name": "use_meme", "arguments": "{}", "output": "二"}
+        ]}])
+        .to_string(),
+    );
+    let image = |n: u64| json!({"type": "text", "text": format!("图{n}")});
+    let attached = Attached {
+        tools: HashMap::from([(
+            ("turn_a".to_string(), "bridge_use_meme_1".to_string()),
+            vec![image(1), image(2)],
+        )]),
+        ..Attached::default()
+    };
+    let built = build(&HEAD, &session(""), &[one], &attached);
+    ledger_ok(&built.events);
+    let results: Vec<&Value> = built
+        .events
+        .iter()
+        .filter(|event| event["kind"] == "tool.result")
+        .collect();
+    assert_eq!(results[0]["body"]["blocks"][1], image(1));
+    assert_eq!(
+        results[1]["body"]["blocks"].as_array().unwrap().len(),
+        1,
+        "别的工具不领"
+    );
+    assert_eq!(results[2]["body"]["blocks"][1], image(2));
+    assert_eq!(built.tool_blocks, 2);
 }

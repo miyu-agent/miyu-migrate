@@ -1,7 +1,5 @@
 //! 场所会话：群的一轮照号拆人、上文和她自己的不拆、并进来的话认可信元数据、被挤出的轮照时刻归并、私聊是对方说的。
 
-use std::collections::HashMap;
-
 use serde_json::json;
 
 use super::super::*;
@@ -107,7 +105,7 @@ fn a_group_turn_becomes_one_message_per_line_and_the_rest_join_the_turn() {
         "后来又说\n\nTrusted metadata for this QQ follow-up message: sender QQ=333; message ID=9"
             .to_string(),
     ];
-    let built = build(&head, &session(""), &[one], &HashMap::new());
+    let built = build(&head, &session(""), &[one], &Attached::default());
     let events = &built.events;
     assert_eq!(
         kinds(events),
@@ -154,7 +152,12 @@ fn a_private_turn_is_said_by_the_other_person() {
         who: Who::Private("333"),
         ..HEAD
     };
-    let built = build(&head, &session(""), &[turn("turn_p", 1)], &HashMap::new());
+    let built = build(
+        &head,
+        &session(""),
+        &[turn("turn_p", 1)],
+        &Attached::default(),
+    );
     assert_eq!(kinds(&built.events)[1], "message.user");
     assert!(built.events[0]["body"].get("confined").is_none());
     assert_eq!(

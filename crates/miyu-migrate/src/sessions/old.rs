@@ -11,7 +11,7 @@ pub const NEWEST: i64 = 40;
 
 /// 打开的旧库。
 pub struct Db {
-    conn: Connection,
+    pub(super) conn: Connection,
     /// `PRAGMA user_version`。
     pub version: i64,
 }
@@ -31,6 +31,8 @@ pub struct Session {
     pub owner: String,
     /// 子代理的父会话。
     pub parent: Option<String>,
+    /// 0 主会话、1 子代理、2 孙代理（v39 起；以前的子代理是 0）。
+    pub depth: i64,
     /// 创建时刻（RFC 3339）。
     pub created_at: String,
     /// 最后改动（RFC 3339）。
@@ -126,7 +128,12 @@ impl Db {
     }
 
     /// `SELECT` 照列名：有的取它，没有的写 `NULL AS <列>`。表不在的是 `None`。
-    fn select(&self, table: &str, wanted: &[&str], rest: &str) -> rusqlite::Result<Option<String>> {
+    pub(super) fn select(
+        &self,
+        table: &str,
+        wanted: &[&str],
+        rest: &str,
+    ) -> rusqlite::Result<Option<String>> {
         let have = self.columns(table)?;
         if have.is_empty() {
             return Ok(None);
@@ -164,6 +171,7 @@ impl Db {
                 "parent_session_id",
                 "created_at",
                 "updated_at",
+                "depth",
             ],
             "ORDER BY created_at, session_id",
         )?
@@ -183,6 +191,7 @@ impl Db {
                 parent: row.get(5)?,
                 created_at: text(row, 6)?,
                 updated_at: text(row, 7)?,
+                depth: row.get::<_, Option<i64>>(8)?.unwrap_or_default(),
             })
         })?;
         rows.collect()
@@ -313,6 +322,6 @@ impl Db {
 }
 
 /// 一格字：NULL 当空的。
-fn text(row: &Row<'_>, index: usize) -> rusqlite::Result<String> {
+pub(super) fn text(row: &Row<'_>, index: usize) -> rusqlite::Result<String> {
     Ok(row.get::<_, Option<String>>(index)?.unwrap_or_default())
 }

@@ -99,6 +99,43 @@ impl Stage {
         events: &[Value],
         exported: &str,
     ) -> Result<PathBuf, StageError> {
+        self.bundle_all(&[(id.to_string(), events.to_vec())], exported)
+    }
+
+    /// 几个会话打成一个包（主会话和它的子会话，细则第一节第 4 条）：头一个是主会话。每一个都照核心的账本查一遍，有一个过不了
+    /// 整个包不打（报的序号是那一个会话里的）。
+    ///
+    /// # Errors
+    ///
+    /// 见 [`StageError`]。
+    pub fn bundle_all(
+        &self,
+        sessions: &[(String, Vec<Value>)],
+        exported: &str,
+    ) -> Result<PathBuf, StageError> {
+        let mut parts = Vec::with_capacity(sessions.len());
+        for (id, events) in sessions {
+            parts.push(self.log(id, events)?);
+        }
+        let Some(main) = parts.first().map(|part| part.session.clone()) else {
+            return Err(StageError::Id("no session".to_string()));
+        };
+        let out = self.dir.join("bundles").join(format!("{main}.miyu"));
+        if out.exists() {
+            fs::remove_file(&out)?;
+        }
+        let about = About {
+            main,
+            miyu: format!("miyu-migrate {}", env!("CARGO_PKG_VERSION")),
+            exported: exported.to_string(),
+        };
+        bundle::write(&parts, &self.blobs, &about, &out)
+            .map_err(|error| StageError::Bundle(format!("{error:?}")))?;
+        Ok(out)
+    }
+
+    /// 一个会话的事件：交核心读一遍、过账本、写进暂存的日志。
+    fn log(&self, id: &str, events: &[Value]) -> Result<Part, StageError> {
         let session = SessionId::parse(id).map_err(|error| StageError::Id(error.to_string()))?;
         let dir = self.dir.join("sessions").join(id);
         if dir.exists() {
@@ -124,22 +161,10 @@ impl Stage {
         let mut log = SessionLog::create(&dir, SEGMENT_LIMIT)?;
         log.append(&parsed)?;
         drop(log);
-        let out = self.dir.join("bundles").join(format!("{id}.miyu"));
-        if out.exists() {
-            fs::remove_file(&out)?;
-        }
-        let about = About {
-            main: session.clone(),
-            miyu: format!("miyu-migrate {}", env!("CARGO_PKG_VERSION")),
-            exported: exported.to_string(),
-        };
-        let part = Part {
+        Ok(Part {
             session,
             dir,
             upto: None,
-        };
-        bundle::write(&[part], &self.blobs, &about, &out)
-            .map_err(|error| StageError::Bundle(format!("{error:?}")))?;
-        Ok(out)
+        })
     }
 }

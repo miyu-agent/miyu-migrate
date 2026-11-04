@@ -1,16 +1,19 @@
 //! 会话（细则第一节，施工 MG-3）：旧会话库里管理员的会话一个一个打成原始包、经 `session.import {archive: true}` 导成只读存档。
 //! 本机会话（MG-3 上）、QQ 场所会话（MG-3 中：私聊照原样，群的一轮照每行开头的号拆）；被挤出上下文的轮拼回原来的会话
-//! （[`evicted`]），原来的会话不在了的照人格归进一个兜底的本机存档。子代理的留给下一步，一次性的 `ask`、成员的不迁、别的平台的
-//! 整会话留在压缩包里，都在报告里数出来。
+//! （[`evicted`]），原来的会话不在了的照人格归进一个兜底的本机存档。工具出的图、内嵌媒体、产物、溢出、提问、插话、只有展示转录的
+//! 轮、子代理会话（作子会话，和主会话一个包，MG-3 下）。一次性的 `ask`、成员的不迁，别的平台的整会话留在压缩包里，都在报告里
+//! 数出来。
 //!
 //! 新编号由旧编号算出来（[`ids::session_id`]），重跑时导入回 `present`，不重复。
 
 mod events;
 pub mod evicted;
+mod extras;
 pub mod group;
 pub mod ids;
 mod import;
 mod old;
+mod rounds;
 mod said;
 mod snapshot;
 mod stage;
@@ -25,7 +28,8 @@ use crate::layout::Layout;
 use crate::personas::Mapped;
 use crate::report::{Item, Skip, Status};
 
-pub use events::{Built, Head, Media, build};
+pub use events::{Attached, Built, Head, Media, build};
+pub use extras::{Extras, Raw};
 pub use import::{Job, Owned};
 pub use old::{Attachment, Binding, Db, NEWEST, Session, Turn};
 pub use said::Who;
@@ -54,9 +58,17 @@ pub struct Counted {
     pub evicted: u64,
     /// 群里拆不出号的话。
     pub unknown: u64,
+    /// 工具结果后面接的图、文件。
+    pub tool_blocks: u64,
+    /// 提问。
+    pub questions: u64,
+    /// 作子会话导进去的子代理会话。
+    pub children: u64,
+    /// 工具的附带对不上调用、没接上的。
+    pub unplaced: u64,
 }
 
-/// 迁会话：读 `copy`（解出来的副本）的会话库，人格照 `mapped`，暂存在 `stage`，导进 `core`（数据根 `root`：借快照时读它的
+/// 迁会话：读 `copy`（解出来的副本，旧根原来在 `original`）的会话库，人格照 `mapped`，暂存在 `stage`，导进 `core`（数据根 `root`：借快照时读它的
 /// blob 库）。交回报告的一项。
 ///
 /// # Errors
@@ -65,7 +77,7 @@ pub struct Counted {
 pub fn migrate(
     core: &mut dyn Core,
     root: &DataRoot,
-    copy: &Layout,
+    (copy, original): (&Layout, &Path),
     mapped: &[Mapped],
     stage: &Path,
 ) -> Result<Item, Said> {
@@ -109,7 +121,7 @@ pub fn migrate(
         Err(error) => return Ok(archived(item, format!("暂存目录建不了：{error}"))),
     };
     let (jobs, unreadable) = plan(
-        copy,
+        (copy, original),
         &source,
         &db,
         (&sessions, &bindings),
@@ -150,6 +162,10 @@ pub fn migrate(
                 counted.replay_only += built.replay_only;
                 counted.evicted += built.evicted;
                 counted.unknown += built.unknown;
+                counted.tool_blocks += built.tool_blocks;
+                counted.questions += built.questions;
+                counted.unplaced += built.unplaced;
+                counted.children += job.children.len() as u64;
             }
             Err(why) => item.skipped.push(skip(&job.session.id, &why)),
         }
@@ -173,7 +189,7 @@ pub fn migrate(
 /// 排出要导的会话：会话库里该导的，被挤出的轮拼回去；原来的会话不在了的（或者是空的 `origin_session_id`），照人格归进一个兜底
 /// 的本机存档。不导的记进 `skipped`。交回要导的，和读不了的被挤出的库（scope）。
 fn plan(
-    copy: &Layout,
+    (copy, original): (&Layout, &Path),
     source: &str,
     db: &Db,
     (sessions, bindings): (&[Session], &HashMap<String, Binding>),
@@ -205,7 +221,8 @@ fn plan(
         } else if session.kind == "ask" {
             Some("oneshot".to_string())
         } else if session.kind == "subagent" {
-            Some("subagent-later".to_string())
+            // 子代理：排完主会话以后挂到它的根上（[`adopt`]）。
+            continue;
         } else {
             match bindings.get(&session.id) {
                 Some(binding) if binding.platform != "onebot" => {
@@ -238,15 +255,21 @@ fn plan(
             continue;
         };
         let turns = evicted::merge(turns, evicted_of.remove(&session.id).unwrap_or_default());
+        let extras = Extras::read(db, &session.id, &copy.root, original);
+        let turns = queue(turns, &extras, &who);
         jobs.push(Job {
             session: session.clone(),
             turns,
             attachments,
+            extras,
             venue,
             who,
             source: source.to_string(),
+            parent: None,
+            children: Vec::new(),
         });
     }
+    adopt((copy, original), source, db, sessions, &mut jobs, skipped);
     for (scope, turns) in leftover {
         let first = turns
             .first()
@@ -266,15 +289,98 @@ fn plan(
                 parent: None,
                 created_at: first,
                 updated_at: last,
+                depth: 0,
             },
             turns,
             attachments: Vec::new(),
+            extras: Extras::default(),
             venue: "local".to_string(),
             who: Owned::Person,
             source: format!("state/personas/{scope}/memory/evicted_context.db"),
+            parent: None,
+            children: Vec::new(),
         });
     }
     (jobs, unreadable)
+}
+
+/// 插话并进它那一轮（`followups`）：场所会话里交给模型的原文带着旧版的可信元数据，照它认号；本机的取给人看的字。
+fn queue(mut turns: Vec<Turn>, extras: &Extras, who: &Owned) -> Vec<Turn> {
+    for turn in &mut turns {
+        for (shown, content) in extras.queued.get(&turn.id).into_iter().flatten() {
+            let text = if *who == Owned::Person && !shown.trim().is_empty() {
+                shown
+            } else {
+                content
+            };
+            turn.followups.push(text.clone());
+        }
+    }
+    turns
+}
+
+/// 子代理会话挂到它的根（顺着 `parent_session_id` 往上找到的主会话）那个包里，作子会话：`parent` 是它直接的父会话，深度照
+/// `sessions.depth`（v39 以前写的是 0，照往上几层算）。根不在要导的里面的（父会话没了、根是不导的）不导，报告里写
+/// `orphan-subagent`。
+fn adopt(
+    (copy, original): (&Layout, &Path),
+    source: &str,
+    db: &Db,
+    sessions: &[Session],
+    jobs: &mut [Job],
+    skipped: &mut Vec<Skip>,
+) {
+    let by_id: HashMap<&str, &Session> =
+        sessions.iter().map(|one| (one.id.as_str(), one)).collect();
+    for session in sessions
+        .iter()
+        .filter(|one| one.kind == "subagent" && one.owner.is_empty())
+    {
+        // 往上找根，顺便数几层；绕成圈的、断了的当找不到。
+        let mut levels = 0u64;
+        let mut at = session;
+        let mut root = None;
+        while let Some(parent) = at.parent.as_deref().and_then(|id| by_id.get(id)) {
+            levels += 1;
+            if levels > 16 {
+                break;
+            }
+            if parent.kind != "subagent" {
+                root = Some(parent.id.clone());
+                break;
+            }
+            at = parent;
+        }
+        let Some(job) = root.and_then(|root| {
+            jobs.iter_mut()
+                .find(|job| job.session.id == root && job.parent.is_none())
+        }) else {
+            skipped.push(skip(&session.id, "orphan-subagent"));
+            continue;
+        };
+        let (Ok(turns), Ok(attachments)) = (db.turns(&session.id), db.attachments(&session.id))
+        else {
+            skipped.push(skip(&session.id, "unreadable"));
+            continue;
+        };
+        let depth = u64::try_from(session.depth)
+            .ok()
+            .filter(|depth| *depth > 0)
+            .unwrap_or(levels);
+        let extras = Extras::read(db, &session.id, &copy.root, original);
+        let turns = queue(turns, &extras, &Owned::Person);
+        job.children.push(Job {
+            session: session.clone(),
+            turns,
+            attachments,
+            extras,
+            venue: "local".to_string(),
+            who: Owned::Person,
+            source: source.to_string(),
+            parent: session.parent.clone().map(|parent| (parent, depth)),
+            children: Vec::new(),
+        });
+    }
 }
 
 fn skip(key: &str, why: &str) -> Skip {
@@ -296,6 +402,12 @@ fn note(counted: &Counted, unmapped: u64) -> String {
         "{} 轮，{} 个附件；摘要行 {} 条不导（是派生的）。",
         counted.turns, counted.attachments, counted.summaries
     );
+    if counted.children > 0 {
+        note.push_str(&format!(
+            "子代理会话 {} 个作子会话，和主会话一起导。",
+            counted.children
+        ));
+    }
     if counted.present > 0 {
         note.push_str(&format!("其中 {} 个会话以前就导过。", counted.present));
     }
@@ -306,7 +418,7 @@ fn note(counted: &Counted, unmapped: u64) -> String {
     }
     if counted.replay_only > 0 {
         note.push_str(&format!(
-            "{} 轮只有展示转录，工具细节这一步没导。",
+            "{} 轮只有展示转录：工具照转录拼的，参数和输出被旧版截过。",
             counted.replay_only
         ));
     }
@@ -322,7 +434,21 @@ fn note(counted: &Counted, unmapped: u64) -> String {
             counted.unknown
         ));
     }
-    note.push_str("子代理的会话下一步再迁。");
+    if counted.tool_blocks > 0 {
+        note.push_str(&format!(
+            "工具结果后面接了 {} 张图、文件。",
+            counted.tool_blocks
+        ));
+    }
+    if counted.unplaced > 0 {
+        note.push_str(&format!(
+            "工具出的图、文件有 {} 样对不上调用（那一轮的工具细节没有了，例如被挤出的轮），没接上，留在压缩包里。",
+            counted.unplaced
+        ));
+    }
+    if counted.questions > 0 {
+        note.push_str(&format!("提问 {} 次写成了 ask_user。", counted.questions));
+    }
     note
 }
 

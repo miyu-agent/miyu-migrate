@@ -60,6 +60,7 @@ pub(super) fn session(name: &str) -> Session {
         parent: None,
         created_at: "2026-09-25T07:00:00+00:00".to_string(),
         updated_at: "2026-09-25T08:00:00+00:00".to_string(),
+        depth: 0,
     }
 }
 
@@ -83,6 +84,7 @@ pub(super) const HEAD: Head<'static> = Head {
     policy: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     persona: Some("persona-1"),
     who: Who::Person,
+    parent: None,
 };
 
 /// 每一条核心都读得懂，整份过得了核心的账本（载入时查的那一套）。

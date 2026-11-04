@@ -137,8 +137,14 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     let found =
         personas::read(&copy, &old.root).map_err(|error| RunError::Io(work.clone(), error))?;
     let mapped = personas::apply(core, &found.olds).map_err(RunError::Core)?;
-    let sessions = crate::sessions::migrate(core, &plan.root, &copy, &mapped, &dir.join("stage"))
-        .map_err(RunError::Core)?;
+    let sessions = crate::sessions::migrate(
+        core,
+        &plan.root,
+        (&copy, &old.root),
+        &mapped,
+        &dir.join("stage"),
+    )
+    .map_err(RunError::Core)?;
     let (files, bytes) = manifest.totals();
     let (_, sha256) =
         archive::hash_file(&packed).map_err(|error| RunError::Io(packed.clone(), error))?;
