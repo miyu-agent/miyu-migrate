@@ -141,6 +141,11 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
     if let Some(documents) = documents {
         notes.push(format!("新版这个库现在认得 {documents} 篇。"));
     }
+    if item.migrated > present {
+        notes.push(
+            "第一次列出、搜这个库之前新版会先建索引，篇数多要等一会儿，不是卡住了。".to_string(),
+        );
+    }
     if other > 0 {
         notes.push(format!(
             "{other} 篇不是新版认的类型（只认 md、txt、pdf、html），照拷了，新版不建索引。"

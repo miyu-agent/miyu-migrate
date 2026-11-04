@@ -110,6 +110,10 @@ fn own_documents_land_in_the_legacy_base() {
     assert_eq!(skipped, vec![("../escape.md", "bad-name")]);
     let note = item.note.unwrap();
     assert!(note.contains("新版这个库现在认得 2 篇"), "{note}");
+    assert!(
+        note.contains("第一次列出、搜这个库之前新版会先建索引"),
+        "{note}"
+    );
     assert!(note.contains("1 篇不是新版认的类型"), "{note}");
     assert!(note.contains("旧版内置的默认库 1 篇不迁"), "{note}");
     assert!(note.contains("b.txt → b-legacy.txt"), "{note}");
@@ -121,11 +125,12 @@ fn own_documents_land_in_the_legacy_base() {
     };
     let item = migrate(&mut again, &layout, new.path()).unwrap();
     assert_eq!(item.migrated, 3, "已经有一样的算迁过");
+    let note = item.note.unwrap();
     assert!(
-        item.note
-            .unwrap()
-            .contains("0 篇拷进了 `root/kb/legacy/`，3 篇以前迁过")
+        note.contains("0 篇拷进了 `root/kb/legacy/`，3 篇以前迁过"),
+        "{note}"
     );
+    assert!(!note.contains("先建索引"), "这一次没拷新的，不说：{note}");
     assert!(!base.join("b-legacy-3.txt").exists(), "不再多拷一份");
 }
 
