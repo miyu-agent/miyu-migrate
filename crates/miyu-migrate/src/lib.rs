@@ -4,6 +4,7 @@
 pub mod archive;
 pub mod core;
 pub mod jsonc;
+pub mod knowledge;
 pub mod layout;
 pub mod lock;
 pub mod memes;
