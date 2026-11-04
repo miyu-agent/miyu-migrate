@@ -9,10 +9,12 @@ miyu migrate ~/.miyu-0.7
 ```
 
 它先把旧目录整个打成压缩包、逐个文件核对，然后只从解出来的副本读，经新版核心的协议写进去，最后出两份报告：一份给人看，
-一份给 agent 读（写明没迁的东西在压缩包里的哪个路径、旧格式是什么样，要的时候让 agent 接着迁）。旧目录不动。
+一份给 agent 读（写明没迁的东西在压缩包里的哪个路径、旧格式是什么样，要的时候让 agent 接着迁）。旧目录不动。压缩包和报告放在
+新数据根的 `root/documents/旧版 Miyu 迁移/<时刻>/`：人看得见，卸了这个包也不删，跟着数据根一起备份。
 
 迁移程序连新版核心的身份就是在终端里跑它的人（读数据根的 `run/token`），核心没在跑会照 `miyu core` 拉起。动手前会先查：旧版
-停了没有（`daemon.lock`），状态目录那块盘够不够（要旧目录大小的两倍）。
+停了没有（`daemon.lock`），盘够不够（放压缩包的那块要旧目录大小的两倍：压缩包按不压缩算，加上解出来核对的那一份；解出来的
+那一份在迁移包的状态目录里，用完就删）。
 
 现在迁的：
 
@@ -27,7 +29,7 @@ miyu migrate ~/.miyu-0.7
   - 工具出的图、内嵌给模型看的图、溢出的长输出接在那一条工具结果后面；她问你的问题（`ask_user`）、你中途插的话、只留了展示转录
     的工具来回都在；子代理的会话作子会话，和它的主会话一起导。
 
-- **QQ 消息记录**：旧版记下的群聊、私聊消息转成 im 收的写法（迁移目录里的 `qq-records.jsonl`），交 `miyu im records import`
+- **QQ 消息记录**：旧版记下的群聊、私聊消息转成 im 收的写法（这一次的目录里的 `qq-records.jsonl`），交 `miyu im records import`
   导进 im 的库；im 认得出已经有的（重跑、新 im 并行接过的那一段），不会多出来。im 没装的，报告里写装上以后跑哪一行。
 
 - **记忆**：每个旧人格记下的知识点导进映射到的那个新人格（原来记下的时刻留着），说的是别人的记成那个人的，说的是你的记成你的；
@@ -39,7 +41,7 @@ miyu migrate ~/.miyu-0.7
   显示、语音……）写进报告。
 
 - **表情包**：你自己收的那几个库各做成一个表情包的内容包（图、描述、什么时候用、从哪收来的），装着表情包的直接装上；没装的包留在
-  迁移目录里，报告写装上以后跑哪一行。
+  这一次的目录里，报告写装上以后跑哪一行。
 
 - **技能、脚本**：你自己写的技能拷进新版的技能目录（同名的不覆盖，改名并列进报告）；自己写的脚本新版格式不一样，原样留在压缩包里，
   报告逐个列出，官方源里已经有同名新包的提示装。旧版包管理器装的不拷，报告里写到官方源装哪个新包。
@@ -127,20 +129,20 @@ miyu migrate ~/.miyu
 
 **五、看报告**
 
-跑完印两行路径。都在新数据根的迁移包状态目录里，一次一个目录，目录名是这一次的时刻（UTC）：
+跑完印两行路径。都在新数据根的 `root/documents/旧版 Miyu 迁移/` 里，一次一个目录，目录名是这一次的时刻（UTC）：
 
 ```fish
-ls ~/.cache/miyu-tui-home/var/lib/miyu-migrate/
+ls ~/.cache/miyu-tui-home/root/documents/旧版\ Miyu\ 迁移/
 ```
 
 每个目录里有 `报告.md`（给人看的）、`给agent.json`（给 agent 接着迁用的）、`miyu-0.7.tar.zst`（旧目录的整个压缩包）和
-`miyu-0.7.manifest.json`（压缩包里每个文件的哈希）。
+`miyu-0.7.manifest.json`（压缩包里每个文件的哈希）；im、表情包没装的，还有留着待导的 `qq-records.jsonl` 和表情包的包。
 
 ```fish
-less ~/.cache/miyu-tui-home/var/lib/miyu-migrate/*/报告.md
+less ~/.cache/miyu-tui-home/root/documents/旧版\ Miyu\ 迁移/*/报告.md
 ```
 
-注意：`miyu pkg remove miyu-migrate` 会连这个状态目录一起删掉。要卸包的，先把这一次的目录拷出来。
+压缩包是旧目录唯一的整份备份，放在数据根里，`miyu pkg remove miyu-migrate` 不会删它；不要了自己删这个目录。
 
 **六、出了问题怎么退**
 
@@ -160,13 +162,14 @@ mv ~/.cache/miyu-tui-home ~/.cache/miyu-tui-home.after-migrate
 mv ~/.cache/miyu-tui-home.before-migrate ~/.cache/miyu-tui-home
 ```
 
-`.after-migrate` 里留着这一次的报告和压缩包，看完再删。
+这一次的报告和旧目录的压缩包在 `.after-migrate` 的 `root/documents/旧版 Miyu 迁移/` 里，看完再删。
 
 只撤一部分：报告里每一类都写了写到了哪、迁了几条、哪些改了名。直接放进数据根的几样，删掉对应的目录就是撤：
 
 - 技能：`root/skills/` 下报告列出的那几个
 - 知识库：`root/kb/legacy/`（整个「旧版知识库」）
-- 文件：`root/pictures/`、`root/documents/` 里报告列出的、`root/documents/旧版产物/`、`root/workspace/旧版/`
+- 文件：`root/pictures/`、`root/documents/` 里报告列出的、`root/documents/旧版产物/`、`root/workspace/旧版/`（`root/documents/旧版 Miyu 迁移/`
+  是压缩包和报告，不是迁过来的文件，别一起删）
 - 闲鱼登录态：`root/state/scripts/miyu-scripts-goofish/goofish/legacy/`
 - 表情包：`miyu pkg remove legacy-memes-<库名>`（报告里写了是哪几个）
 

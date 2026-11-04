@@ -13,12 +13,14 @@ use crate::lock;
 use crate::personas::{self, How};
 use crate::report::{self, Archive, Item, OldRoot, Report, Skip, Status};
 
-/// 迁到哪：这一次的东西都放在 `<状态目录>/<时刻>/` 下（包的状态目录，转交时由 `MIYU_STATE_DIR` 给）。
+/// 迁到哪：留给人的（压缩包、清单、两份报告、没导成的 QQ 记录和表情包）放在新数据根的 `root/documents/旧版 Miyu 迁移/<时刻>/`
+/// （[`keep_dir`]：人看得见，卸了迁移包也不删，跟着数据根一起备份）；中间产物（解开核对的副本、暂存）放在
+/// `<状态目录>/<时刻>/`（包的状态目录，转交时由 `MIYU_STATE_DIR` 给），用完删。
 #[derive(Debug, Clone)]
 pub struct Plan {
     /// 旧数据根。
     pub old: PathBuf,
-    /// 包的状态目录。
+    /// 包的状态目录：只放中间产物。
     pub state: PathBuf,
     /// 这一次的时刻：目录名、报告里写的。
     pub at: jiff::Timestamp,
@@ -30,6 +32,15 @@ pub struct Plan {
     pub home: Option<PathBuf>,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
+}
+
+/// 留给人的那些放在新数据根的哪个目录下（一次一个子目录，名字是时刻）。
+pub const KEEP: &str = "旧版 Miyu 迁移";
+
+/// 新数据根 `root` 里放留给人的那一层：`root/documents/旧版 Miyu 迁移/`，同迁过去的文档一层（MG-10）。
+#[must_use]
+pub fn keep_dir(root: &miyu_client::places::DataRoot) -> PathBuf {
+    root.path().join("root").join("documents").join(KEEP)
 }
 
 /// `path` 所在那块盘还剩多少字节（给这个用户的）。
@@ -50,12 +61,15 @@ pub enum RunError {
     StillRunning(Option<u32>),
     /// 这一次的目录已经有了（同一秒跑了两次）：不盖。
     Exists(PathBuf),
-    /// 状态目录那块盘不够：要多少、有多少（字节）。
+    /// 一块盘不够：要多少、有多少（字节），哪个目录。
     NoSpace {
-        /// 要：旧根的两倍（压缩包按不压缩算，加上解出来核对的那一份）。
+        /// 要：放压缩包的那块盘要旧根的两倍（压缩包按不压缩算，加上解出来核对的那一份，同一块盘的时候），
+        /// 状态目录那块盘要一倍（解出来的那一份）。
         need: u64,
         /// 有。
         have: u64,
+        /// 要放进去的目录。
+        at: PathBuf,
     },
     /// 核心拒了、断了。
     Core(Said),
@@ -78,9 +92,10 @@ impl fmt::Display for RunError {
                 "{} already exists; wait a second and run again",
                 dir.display()
             ),
-            RunError::NoSpace { need, have } => write!(
+            RunError::NoSpace { need, have, at } => write!(
                 f,
-                "not enough disk space for the archive and its check: need {} MiB, have {} MiB",
+                "not enough disk space for the archive and its check under {}: need {} MiB, have {} MiB",
+                at.display(),
                 need.div_ceil(1 << 20),
                 have >> 20
             ),
@@ -113,16 +128,12 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     if let Some(holder) = lock::holder(&lock).map_err(|error| RunError::Io(lock.clone(), error))? {
         return Err(RunError::StillRunning(holder.pid));
     }
-    fs::create_dir_all(&plan.state).map_err(|error| RunError::Io(plan.state.clone(), error))?;
-    let need = size(&old.root)
-        .map_err(|error| RunError::Io(old.root.clone(), error))?
-        .saturating_mul(2);
-    let have =
-        (plan.space)(&plan.state).map_err(|error| RunError::Io(plan.state.clone(), error))?;
-    if have < need {
-        return Err(RunError::NoSpace { need, have });
-    }
-    let dir = plan.state.join(stamp(plan.at));
+    let keep = keep_dir(&plan.root);
+    let bytes = size(&old.root).map_err(|error| RunError::Io(old.root.clone(), error))?;
+    room(plan, &keep, bytes.saturating_mul(2))?;
+    room(plan, &plan.state, bytes)?;
+    fs::create_dir_all(&keep).map_err(|error| RunError::Io(keep.clone(), error))?;
+    let dir = keep.join(stamp(plan.at));
     match fs::create_dir(&dir) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
@@ -136,7 +147,9 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     let text = serde_json::to_string_pretty(&manifest)
         .map_err(|error| RunError::Io(listed.clone(), io::Error::other(error)))?;
     fs::write(&listed, text + "\n").map_err(|error| RunError::Io(listed.clone(), error))?;
-    let work = dir.join("work");
+    let scratch = plan.state.join(stamp(plan.at));
+    fs::create_dir_all(&scratch).map_err(|error| RunError::Io(scratch.clone(), error))?;
+    let work = scratch.join("work");
     archive::unpack_and_check(&packed, &manifest, &work).map_err(RunError::Archive)?;
     let copy = layout::read(&work).map_err(RunError::Layout)?;
     let found =
@@ -147,7 +160,7 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         &plan.root,
         (&copy, &old.root),
         &mapped,
-        &dir.join("stage"),
+        &scratch.join("stage"),
     )
     .map_err(RunError::Core)?;
     let (files, bytes) = manifest.totals();
@@ -227,12 +240,8 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     let (human, agent) = report
         .write(&dir)
         .map_err(|error| RunError::Io(dir.clone(), error))?;
-    // 解出来的副本、暂存的包用完就删：留着的是压缩包、清单、报告。
-    fs::remove_dir_all(&work).map_err(|error| RunError::Io(work.clone(), error))?;
-    let stage = dir.join("stage");
-    if stage.exists() {
-        fs::remove_dir_all(&stage).map_err(|error| RunError::Io(stage.clone(), error))?;
-    }
+    // 中间产物（解出来的副本、暂存）用完就删：留给人的在数据根里。
+    fs::remove_dir_all(&scratch).map_err(|error| RunError::Io(scratch.clone(), error))?;
     Ok(Done { human, agent })
 }
 
@@ -291,6 +300,20 @@ fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec
         });
     }
     items
+}
+
+/// `dir` 那块盘够不够 `need` 字节：`dir` 还没建的问它最近的已有上一层（查完之前什么都不建）。
+fn room(plan: &Plan, dir: &Path, need: u64) -> Result<(), RunError> {
+    let probe = dir.ancestors().find(|one| one.is_dir()).unwrap_or(dir);
+    let have = (plan.space)(probe).map_err(|error| RunError::Io(probe.to_path_buf(), error))?;
+    if have < need {
+        return Err(RunError::NoSpace {
+            need,
+            have,
+            at: dir.to_path_buf(),
+        });
+    }
+    Ok(())
 }
 
 /// 旧根一共多大：普通文件的字节数（链接不跟）。
