@@ -5,7 +5,7 @@
 //!   包没装的不拷，提示装。
 //! - `zhihu-search/`、`xhs-search/`、`bilibili/`：新版没有对应的包，只列进报告，登录态留在压缩包里。
 //! - `bilibili-live-stream/`：新版有 `miyu-skills-bilibili-live-stream`，旧版的登录态格式没核实，不拷：报告提示装上新包、在里面重新登录。
-//! - `*.lock`、`login-qr.png` 不拷。登录态是凭据：报告只写文件名和条数。
+//! - `*.lock`、`login-qr.png` 不拷。登录态是凭据：报告只写文件名和条数；拷过去的 Unix 上是 0600（目录 0700）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -61,7 +61,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
                     .map(|name| name.to_string_lossy().to_string())
                     .unwrap_or_default();
                 let copied =
-                    fs::create_dir_all(&target).and_then(|()| fs::copy(file, target.join(&name)));
+                    fs::create_dir_all(&target).and_then(|()| private(file, &target, &name));
                 match copied {
                     Ok(_) => item.migrated += 1,
                     Err(error) => item.skipped.push(skip(
@@ -126,6 +126,19 @@ fn wanted(dir: &Path) -> Vec<PathBuf> {
         .unwrap_or_default();
     files.sort();
     files
+}
+
+/// 凭据拷成只有自己读得到的（Unix 上目录 0700、文件 0600），不跟着源文件、umask 放宽：数据根以后有人放宽了权限，凭据也不跟着露。
+fn private(file: &Path, target: &Path, name: &str) -> std::io::Result<()> {
+    let to = target.join(name);
+    fs::copy(file, &to)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(target, fs::Permissions::from_mode(0o700))?;
+        fs::set_permissions(&to, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
 }
 
 /// `dir` 下的子目录，照名字排。

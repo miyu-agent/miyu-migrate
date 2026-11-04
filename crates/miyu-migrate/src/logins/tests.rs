@@ -128,3 +128,28 @@ fn no_logins_no_questions() {
     assert_eq!(item.status, Status::Skipped);
     assert_eq!(core.calls, 0);
 }
+
+/// 凭据拷过去只有自己读得到：源文件是 0644 的也一样。
+#[cfg(unix)]
+#[test]
+fn copied_logins_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let (old, layout) = old_root();
+    let session = old.path().join("cache/goofish-search/session.json");
+    fs::set_permissions(&session, fs::Permissions::from_mode(0o644)).unwrap();
+    let new = tempfile::tempdir().unwrap();
+    let mut core = Fake {
+        installed: true,
+        calls: 0,
+    };
+    migrate(&mut core, &layout, new.path()).unwrap();
+    let target = new
+        .path()
+        .join("root/state/scripts")
+        .join(GOOFISH)
+        .join("goofish/legacy");
+    let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&target.join("session.json")), 0o600);
+    assert_eq!(mode(&target.join("abcdef012345.json")), 0o600);
+    assert_eq!(mode(&target), 0o700);
+}
