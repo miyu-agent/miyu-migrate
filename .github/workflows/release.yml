@@ -1,0 +1,39 @@
+# 发版（照官方打包模板，同 miyu-render、miyu-im）：推 `v*` 标签（v 加上 miyu-migrate/package.toml 里的版本）时一种系统打一个
+# `.miyu`（`miyu pkg pack` 打的，软件源只收这种），传进这个标签的 Release；软件源每天收一次，收进索引以后
+# `miyu pkg install miyu-migrate` 就装得上。迁移包：本仓库编的 miyu-migrate 程序（旧版 Miyu 的提示词原文编在程序里），加上
+# miyu-migrate/ 里的清单；本仓库的许可证随包发（AGPL）。打标签、进官方源要主人点头。
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x86_64
+          - os: macos-latest
+            target: macos-aarch64
+          - os: windows-latest
+            target: windows-x86_64
+    uses: miyu-agent/packages/.github/workflows/pack.yml@main
+    permissions:
+      contents: write
+    with:
+      package: miyu-migrate
+      folder: miyu-migrate
+      target: ${{ matrix.target }}
+      runs-on: ${{ matrix.os }}
+      build: |
+        set -euo pipefail
+        rustup toolchain install
+        cargo build --release --locked -p miyu-migrate
+        exe=""
+        if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+        mkdir -p miyu-migrate/bin
+        cp "target/release/miyu-migrate$exe" "miyu-migrate/bin/miyu-migrate$exe"
+        cp LICENSE miyu-migrate/LICENSE

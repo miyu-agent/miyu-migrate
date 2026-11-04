@@ -61,6 +61,117 @@ miyu migrate ~/.miyu-0.7
 
 新版核心一个字节都不认旧格式：旧用户都迁完以后，这个包下架、仓库归档。
 
+## 主人在真数据根上跑
+
+主人这台的情况和上面那三行不一样：新版的数据根由 `MIYU_HOME` 指到 `~/.cache/miyu-tui-home`，不是 `~/.miyu`，所以旧目录
+`~/.miyu` 不用挪，原地交给迁移程序就行。下面是 fish，一行一个代码块，照顺序敲；每一步都可以停下来看。
+
+**零、先确认两件事**
+
+- 核心要认得「只带子命令的包」（核心那边改完会给出最低的提交号）；部署还是 11-03 那版（`43ff9ee97`）的，先换核心。
+- 用临时部署的包装脚本（`~/.local/bin/miyu`）的：它照子命令转交，列表里要加上 `migrate`，否则 `miyu migrate` 会打开终端界面。
+
+**一、装包**（二选一）
+
+本地的包文件（CI 或者自己 `miyu pkg pack` 打出来的 `.miyu`，路径换成实际的）：
+
+```fish
+miyu pkg install ./miyu-migrate-0.1.0-linux-x86_64.miyu
+```
+
+或者等它进了官方源：
+
+```fish
+miyu pkg install miyu-migrate
+```
+
+装好看一眼能不能转交过去（只印用法，不动任何东西）：
+
+```fish
+miyu migrate --help
+```
+
+**二、停旧版核心**（8300 那个；什么时候停由主人自己定，停了旧版的 QQ、网页就断了）
+
+先看它在不在跑：
+
+```fish
+ss -ltnp | grep ':8300'
+```
+
+在跑的照旧版自己的命令停。本机的 `miyu` 已经换成新版的包装脚本，旧版程序是改了名的那一份：
+
+```fish
+~/.local/bin/miyu.0.7.0-local.bak daemon stop
+```
+
+没停也不要紧：迁移程序动手前会对 `~/.miyu/daemon.lock` 试锁，旧核心还拿着就报「旧版还在跑」，一个字都不写。
+
+**三、给新数据根拍一份底**（回退用；先关掉终端界面、网页这些会把核心拉起来的头，新版的 QQ 也会断一会儿）
+
+```fish
+miyu core stop
+```
+
+```fish
+cp -a --reflink=auto ~/.cache/miyu-tui-home ~/.cache/miyu-tui-home.before-migrate
+```
+
+**四、迁**
+
+```fish
+miyu migrate ~/.miyu
+```
+
+迁移程序会自己把核心拉起来。先把 `~/.miyu` 整个打成压缩包、逐个文件核对，再从解出来的副本迁；`~/.miyu` 本身只读不写。
+
+**五、看报告**
+
+跑完印两行路径。都在新数据根的迁移包状态目录里，一次一个目录，目录名是这一次的时刻（UTC）：
+
+```fish
+ls ~/.cache/miyu-tui-home/var/lib/miyu-migrate/
+```
+
+每个目录里有 `报告.md`（给人看的）、`给agent.json`（给 agent 接着迁用的）、`miyu-0.7.tar.zst`（旧目录的整个压缩包）和
+`miyu-0.7.manifest.json`（压缩包里每个文件的哈希）。
+
+```fish
+less ~/.cache/miyu-tui-home/var/lib/miyu-migrate/*/报告.md
+```
+
+注意：`miyu pkg remove miyu-migrate` 会连这个状态目录一起删掉。要卸包的，先把这一次的目录拷出来。
+
+**六、出了问题怎么退**
+
+旧根 `~/.miyu` 本来就没动：迁移失败也好、迁完不满意也好，旧版照旧能起。要撤的是新数据根里导进去的东西。
+
+整个撤（迁完马上发现不对的时候用；迁移以后在新版里新聊的、新改的也会一起回到迁移之前）：
+
+```fish
+miyu core stop
+```
+
+```fish
+mv ~/.cache/miyu-tui-home ~/.cache/miyu-tui-home.after-migrate
+```
+
+```fish
+mv ~/.cache/miyu-tui-home.before-migrate ~/.cache/miyu-tui-home
+```
+
+`.after-migrate` 里留着这一次的报告和压缩包，看完再删。
+
+只撤一部分：报告里每一类都写了写到了哪、迁了几条、哪些改了名。直接放进数据根的几样，删掉对应的目录就是撤：
+
+- 技能：`root/skills/` 下报告列出的那几个
+- 知识库：`root/kb/legacy/`（整个「旧版知识库」）
+- 文件：`root/pictures/`、`root/documents/` 里报告列出的、`root/documents/旧版产物/`、`root/workspace/旧版/`
+- 闲鱼登录态：`root/state/scripts/miyu-scripts-goofish/goofish/legacy/`
+- 表情包：`miyu pkg remove legacy-memes-<库名>`（报告里写了是哪几个）
+
+人格、会话存档、记忆、配置和密钥、QQ 消息记录、赞助记录是经核心和 im 写进库里的，没有逐条撤的命令：要撤这几样，用上面的整个撤。
+
 ## 开发
 
 ```
