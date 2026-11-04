@@ -3,6 +3,7 @@
 
 pub mod archive;
 pub mod core;
+pub mod files;
 pub mod jsonc;
 pub mod knowledge;
 pub mod layout;
