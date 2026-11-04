@@ -5,6 +5,7 @@ pub mod archive;
 pub mod core;
 pub mod layout;
 pub mod lock;
+pub mod memories;
 pub mod personas;
 pub mod records;
 pub mod report;

@@ -1,4 +1,5 @@
-//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格）、出报告。
+//! 一次迁移从头到尾（细则第十三节）：认布局、查旧核心停了没有、看盘够不够、打包核对、逐类迁（人格、会话、QQ 消息记录、记忆）、
+//! 出报告。
 
 use std::fmt;
 use std::fs;
@@ -191,6 +192,10 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     report
         .items
         .push(crate::records::migrate(&copy, &dir, &plan.records));
+    let (memories, pending) = crate::memories::migrate(core, &copy, &mapped, std::thread::sleep)
+        .map_err(RunError::Core)?;
+    report.items.push(memories);
+    report.pending.extend(pending);
     report.personas = mapped;
     let (human, agent) = report
         .write(&dir)
