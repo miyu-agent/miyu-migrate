@@ -8,6 +8,7 @@ pub mod jsonc;
 pub mod knowledge;
 pub mod layout;
 pub mod lock;
+pub mod logins;
 pub mod memes;
 pub mod memories;
 pub mod personas;
