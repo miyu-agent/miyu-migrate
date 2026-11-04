@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use miyu_kernel::event::Event;
-use miyu_kernel::id::SessionId;
+use miyu_kernel::id::{ContentHash, SessionId};
 use miyu_kernel::ledger::Ledger;
 use miyu_store::blob::Blobs;
 use miyu_store::bundle::{self, About, Part};
@@ -76,7 +76,16 @@ impl Stage {
     ///
     /// 写不进。
     pub fn put(&self, bytes: &[u8]) -> io::Result<String> {
-        Ok(self.blobs.put(bytes)?.to_string())
+        // 不用 `Blobs::put`：它建目录只认数据根里面的，暂存可能不在数据根里。照它的布局（`<前两位>/<64 位>`）自己写，读还交给它。
+        let hash = ContentHash::of(bytes);
+        let path = self.blobs.path(&hash);
+        if !path.is_file() {
+            if let Some(fan) = path.parent() {
+                fs::create_dir_all(fan)?;
+            }
+            fs::write(&path, bytes)?;
+        }
+        Ok(hash.to_string())
     }
 
     /// 会话 `id` 的事件写成日志、打成包，交回包的位置。已经打过的（重跑）先删掉暂存里的旧的。

@@ -44,3 +44,10 @@
 - 进程里起真核心：造一个旧会话库（带附件、工具、中断、摘要行、隐藏行），迁进去，`view.page` 打得开、`session.list` 里是存档；
   再跑一遍全是 `present`。
 - 主人旧根的副本上演练两遍。
+
+## 坑
+
+- **核心建目录只认数据根里面的**（核心施工 TMP-1：防的是往删掉了的数据根里写）：`SessionLog::create` 建会话目录、`Blobs::put`
+  建 `<前两位>/` 和临时目录，往上找不到 `.miyu-layout` 的报 `NotFound`。迁移程序的暂存可能不在数据根里（状态目录是人指的），
+  所以暂存的会话目录先自己建好再交给 `SessionLog`，暂存的 blob 照核心的布局（`blobs/<前两位>/<64 位>`）自己写、读还交给
+  `Blobs`。测试 `a_state_folder_outside_the_data_root_still_imports` 守着这一条。以后别的工具从数据根外面造日志也会撞上。

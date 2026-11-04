@@ -112,9 +112,19 @@ fn agent(done: &run::Done) -> Value {
 }
 
 fn plan(fresh: &support::Fresh, old: &Path, at: &str) -> Plan {
+    plan_in(
+        fresh,
+        old,
+        at,
+        fresh.root.path().join("var/lib/miyu-migrate"),
+    )
+}
+
+/// 同 [`plan`]，状态目录是 `state`。
+fn plan_in(fresh: &support::Fresh, old: &Path, at: &str, state: std::path::PathBuf) -> Plan {
     Plan {
         old: old.to_path_buf(),
-        state: fresh.root.path().join("var/lib/miyu-migrate"),
+        state,
         at: at.parse().unwrap(),
         root: fresh.root.clone(),
         space: run::free_space,
@@ -239,4 +249,23 @@ fn local_sessions_become_archives_once() {
     );
     let again = core.call("session.list", json!({})).unwrap();
     assert_eq!(again["sessions"].as_array().unwrap().len(), 1, "什么都没多");
+}
+
+/// 核心建日志目录、blob 目录只认数据根里面的：状态目录在数据根外面的（人自己指了别处）照样导得进。
+#[test]
+fn a_state_folder_outside_the_data_root_still_imports() {
+    let fresh = fresh();
+    let old = old_root();
+    let outside = tempfile::tempdir().unwrap();
+    let mut core = connect(&fresh.root);
+    let plan = plan_in(
+        &fresh,
+        old.path(),
+        "2026-11-04T08:00:00Z",
+        outside.path().join("state"),
+    );
+    let done = agent(&run::run(&plan, &mut core).unwrap());
+    let item = sessions_item(&done);
+    assert_eq!(item["migrated"], 1, "{item}");
+    assert_eq!(item["skipped"].as_array().unwrap().len(), 4, "{item}");
 }
