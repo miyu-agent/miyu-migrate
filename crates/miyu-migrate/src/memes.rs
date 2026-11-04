@@ -137,7 +137,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
     let mut notes = Vec::new();
     for pack in &packs {
         let path = std::path::absolute(&pack.dir).unwrap_or_else(|_| pack.dir.clone());
-        let line = format!("miyu pkg install {}", path.display());
+        let line = format!("miyu pkg install {}", crate::report::shell_path(&path));
         if !installed {
             notes.push(format!(
                 "`{}` {} 条：{MEMES} 没装，装上以后跑 `{line}`。",

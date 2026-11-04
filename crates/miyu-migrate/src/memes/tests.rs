@@ -154,7 +154,11 @@ fn old_root() -> (tempfile::TempDir, Layout) {
 #[test]
 fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
     let (_old, layout) = old_root();
-    let out = tempfile::tempdir().unwrap();
+    // 留给人的目录（「旧版 Miyu 迁移」）带空格：要照抄的那一行加引号。
+    let out = tempfile::Builder::new()
+        .prefix("旧版 迁移")
+        .tempdir()
+        .unwrap();
     let mut with = Fake {
         installed: true,
         refuse: None,
@@ -177,7 +181,7 @@ fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
     assert!(
         item.note
             .unwrap()
-            .contains("miyu-memes 没装，装上以后跑 `miyu pkg install ")
+            .contains("miyu-memes 没装，装上以后跑 `miyu pkg install '")
     );
 
     let mut refused = Fake {

@@ -161,3 +161,22 @@ fn derived_things_fold_into_one_line_and_the_old_root_comes_last() {
         "给 agent 的那份照样逐条"
     );
 }
+
+#[test]
+fn paths_to_paste_are_quoted_when_a_shell_would_split_them() {
+    assert_eq!(
+        shell_path(Path::new("/home/a/.miyu/x-1_2.jsonl")),
+        "/home/a/.miyu/x-1_2.jsonl"
+    );
+    assert_eq!(
+        shell_path(Path::new(
+            "/home/a/root/documents/旧版 Miyu 迁移/t/qq-records.jsonl"
+        )),
+        "'/home/a/root/documents/旧版 Miyu 迁移/t/qq-records.jsonl'"
+    );
+    assert_eq!(shell_path(Path::new("/a/b c")), "'/a/b c'");
+    assert_eq!(shell_path(Path::new("")), "''", "空的也要占一个参数");
+    assert_eq!(shell_path(Path::new("/a/it's $x")), r#""/a/it's \$x""#);
+    assert_eq!(shell_path(Path::new(r#"/a/"q"`\"#)), r#"'/a/"q"`\'"#);
+    assert_eq!(shell_path(Path::new("/a/'\"`\\")), r#""/a/'\"\`\\""#);
+}

@@ -75,7 +75,8 @@ miyu migrate ~/.miyu-0.7
 
 **一、装包**（二选一）
 
-本地的包文件（CI 或者自己 `miyu pkg pack` 打出来的 `.miyu`，路径换成实际的）：
+本地的包文件（CI 打出来的，或者自己在仓库里把程序拷进 `miyu-migrate/bin/`、许可证拷进 `miyu-migrate/LICENSE` 以后用
+`miyu pkg pack miyu-migrate --target linux-x86_64` 打的 `.miyu`，路径换成实际的；装之前会问一句，答 Y）：
 
 ```fish
 miyu pkg install ./miyu-migrate-0.1.0-linux-x86_64.miyu

@@ -99,7 +99,10 @@ pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
         return item;
     }
     let absolute = std::path::absolute(&file).unwrap_or(file);
-    let command = format!("miyu im records import {}", absolute.display());
+    let command = format!(
+        "miyu im records import {}",
+        crate::report::shell_path(&absolute)
+    );
     let mut note = format!(
         "转出 {} 条消息、{} 件撤回（消息不在了的那几次），写在 `{}`。",
         converted.messages,

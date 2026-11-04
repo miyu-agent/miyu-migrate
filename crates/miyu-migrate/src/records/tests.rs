@@ -231,7 +231,11 @@ fn im_imports_the_file_and_its_counts_land_in_the_report() {
 #[test]
 fn without_im_the_file_stays_with_the_line_to_run() {
     let (_dir, layout) = copy();
-    let out = tempfile::tempdir().unwrap();
+    // 留给人的目录（「旧版 Miyu 迁移」）带空格：要照抄的那一行加引号。
+    let out = tempfile::Builder::new()
+        .prefix("旧版 迁移")
+        .tempdir()
+        .unwrap();
     let seen = Arc::new(std::sync::Mutex::new(0));
     let refused = migrate(
         &layout,
@@ -249,7 +253,7 @@ fn without_im_the_file_stays_with_the_line_to_run() {
         note.contains("im 没导（nothing imported: 1 wrong lines in /x）"),
         "{note}"
     );
-    assert!(note.contains("miyu im records import "), "{note}");
+    assert!(note.contains("miyu im records import '"), "{note}");
     let missing = migrate(
         &layout,
         out.path(),

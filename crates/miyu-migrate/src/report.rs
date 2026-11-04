@@ -283,5 +283,31 @@ impl Report {
     }
 }
 
+/// 报告里给人照抄进终端的路径：只有字母、数字和 `/._-+:,@%~` 的照原样，别的（空格、中文目录名带的空格这些）加引号。没有单引号的用
+/// 单引号（fish、bash、zsh、PowerShell 都照字面）；带单引号的用双引号，里面的 `"`、`$`、`\`、`` ` `` 前面加反斜杠（fish、bash、zsh）。
+#[must_use]
+pub fn shell_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    let plain = !text.is_empty()
+        && text
+            .chars()
+            .all(|one| one.is_ascii_alphanumeric() || "/._-+:,@%~".contains(one));
+    if plain {
+        return text;
+    }
+    if !text.contains('\'') {
+        return format!("'{text}'");
+    }
+    let mut quoted = String::from("\"");
+    for one in text.chars() {
+        if matches!(one, '"' | '$' | '\\' | '`') {
+            quoted.push('\\');
+        }
+        quoted.push(one);
+    }
+    quoted.push('"');
+    quoted
+}
+
 #[cfg(test)]
 mod tests;
