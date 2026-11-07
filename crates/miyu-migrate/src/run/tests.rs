@@ -201,3 +201,80 @@ fn exactly_enough_room_is_enough() {
     run(&just, &mut Fake).unwrap();
     assert!(kept(state.path()).join("报告.md").is_file());
 }
+
+/// 主人旧根的样子（RL-6 彩排看出来的）：`default`、`dev` 两个人格都有 `persona.toml`，再加两个头像不在了的人格。
+/// 同一种只报不迁的合成一节，两份报告里都只出现一次、几份路径照先后都在；整份报告里哪一类都不重复。
+#[test]
+fn the_same_kind_of_extra_is_one_section_listing_every_file() {
+    let old = old_root();
+    for (path, text) in [
+        ("personas/default/persona.toml", "[subsystems]\n"),
+        ("personas/dev/persona.toml", "[plugins]\n"),
+        ("data/prompts/甲.md", "甲"),
+        ("data/prompts/甲.json", r#"{"avatar_path":"gone/a.png"}"#),
+        ("data/prompts/乙.md", "乙"),
+        ("data/prompts/乙.json", r#"{"avatar_path":"gone/b.png"}"#),
+    ] {
+        let path = old.path().join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    let state = tempfile::tempdir().unwrap();
+    let done = run(&plan(old.path(), state.path()), &mut Fake).unwrap();
+    let agent: Value = serde_json::from_str(&fs::read_to_string(&done.agent).unwrap()).unwrap();
+    let items = agent["items"].as_array().unwrap();
+    let mut whats: Vec<&str> = items
+        .iter()
+        .map(|item| item["what"].as_str().unwrap())
+        .collect();
+    whats.sort_unstable();
+    let total = whats.len();
+    whats.dedup();
+    assert_eq!(whats.len(), total, "给 agent 的那份每一类只一项：{whats:?}");
+    let human = fs::read_to_string(&done.human).unwrap();
+    for (what, files) in [
+        (
+            "persona-settings",
+            "personas/default/persona.toml、personas/dev/persona.toml",
+        ),
+        (
+            "persona-avatar",
+            "data/prompts/乙.json、data/prompts/甲.json",
+        ),
+    ] {
+        let item: Vec<&Value> = items.iter().filter(|item| item["what"] == what).collect();
+        assert_eq!(item.len(), 1, "给 agent 的那份 {what} 只一项");
+        assert_eq!(item[0]["source"], files, "几份路径照先后都在");
+        let heading = format!("### {what}\n");
+        assert_eq!(
+            human.matches(&heading).count(),
+            1,
+            "给人的那份 {what} 只一节"
+        );
+        let rows: Vec<&str> = human
+            .lines()
+            .filter(|line| line.starts_with(&format!("| {what} |")))
+            .collect();
+        assert_eq!(
+            rows,
+            [format!(
+                "| {what} | `{files}` | {} |",
+                item[0]["format"].as_str().unwrap()
+            )
+            .as_str()],
+            "没迁的那张表 {what} 只一行、几份路径都在"
+        );
+    }
+    let mut headings: Vec<&str> = human
+        .lines()
+        .filter(|line| line.starts_with("### "))
+        .collect();
+    let total = headings.len();
+    headings.sort_unstable();
+    headings.dedup();
+    assert_eq!(
+        headings.len(),
+        total,
+        "给人的那份节标题不重复：{headings:?}"
+    );
+}

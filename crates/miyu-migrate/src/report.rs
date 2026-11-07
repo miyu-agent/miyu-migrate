@@ -27,7 +27,7 @@ pub struct Report {
     /// 旧人格映射成了哪个新人格（会话、记忆照它写）。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub personas: Vec<crate::personas::Mapped>,
-    /// 每一类，照迁的先后。
+    /// 每一类，照迁的先后。一类只一项（`what` 不重复，给人的那份照它印节标题）：同一类有几份文件的，`source` 用「、」并起来。
     pub items: Vec<Item>,
     /// 留给以后接着迁的（例如超长没导的记忆），只有位置。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -71,7 +71,7 @@ pub struct Item {
     pub what: String,
     /// 怎么样了。
     pub status: Status,
-    /// 在压缩包里的相对路径。
+    /// 在压缩包里的相对路径；几份的用「、」并起来。
     pub source: String,
     /// 旧格式一句话：库的表名和版本、JSON 的结构。
     pub format: String,

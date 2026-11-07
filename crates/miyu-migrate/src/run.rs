@@ -269,8 +269,17 @@ fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec
         target: Some("persona.set".to_string()),
         note: None,
     }];
+    // 同一种合成一项：`persona.toml` 一个人格一份、头像不在了的一个人格一份，逐份推会让报告里同名的一节印好几遍。
+    // 几份路径照读到的先后用「、」并起来（同 leftovers 列几处的写法）。
+    let mut kinds: Vec<(&'static str, Vec<&str>)> = Vec::new();
     for extra in extras {
-        let (what, format) = match extra.why {
+        match kinds.iter_mut().find(|(why, _)| *why == extra.why) {
+            Some((_, sources)) => sources.push(&extra.source),
+            None => kinds.push((extra.why, vec![&extra.source])),
+        }
+    }
+    for (why, sources) in kinds {
+        let (what, format) = match why {
             "persona-settings" => (
                 "persona-settings",
                 "TOML：[subsystems] memory/persona_reminder/voice/emotion，[plugins] enabled/scripts/skills/mcp 白名单；新版没有对应",
@@ -291,7 +300,7 @@ fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec
         items.push(Item {
             what: what.to_string(),
             status: Status::Archived,
-            source: extra.source.clone(),
+            source: sources.join("、"),
             format: format.to_string(),
             migrated: 0,
             skipped: Vec::new(),
