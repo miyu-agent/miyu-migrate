@@ -278,3 +278,19 @@ fn the_same_kind_of_extra_is_one_section_listing_every_file() {
         "给人的那份节标题不重复：{headings:?}"
     );
 }
+
+/// 程序自己报的版本（报告的 `migrate`、会话包的 `miyu-migrate <版本>`）和包清单写的一样（施工 MG-16）：工作区版本
+/// 原来一直是 0.0.0，主人看报告会以为装错了。发版只改了清单、忘了改 Cargo.toml 时这条红。
+#[test]
+fn version_matches_the_package_manifest() {
+    let manifest = include_str!("../../../../miyu-migrate/package.toml");
+    let declared = manifest
+        .lines()
+        .find_map(|line| {
+            let rest = line.trim().strip_prefix("version")?.trim_start();
+            let value = rest.strip_prefix('=')?.trim();
+            Some(value.trim_matches('"').to_string())
+        })
+        .expect("清单写着版本");
+    assert_eq!(env!("CARGO_PKG_VERSION"), declared);
+}
