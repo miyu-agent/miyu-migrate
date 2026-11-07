@@ -2,7 +2,7 @@
 # 给人看的字，不发给模型。
 
 [package]
-version = "0.1.0"
+version = "0.1.1"
 targets = ["linux-x86_64", "macos-aarch64", "windows-x86_64"]
 name = { en = "Migrate from Old Miyu", zh = "从旧版 Miyu 迁过来", ja = "旧版 Miyu からの移行" }
 summary = { en = "Move sessions, memories, settings and files from Miyu 0.7 into this version", zh = "把旧版 Miyu（0.7）的会话、记忆、设置和文件迁进这一版", ja = "Miyu 0.7 の会話・記憶・設定・ファイルをこのバージョンへ移す" }

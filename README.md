@@ -79,7 +79,7 @@ miyu migrate ~/.miyu-0.7
 `miyu pkg pack miyu-migrate --target linux-x86_64` 打的 `.miyu`，路径换成实际的；装之前会问一句，答 Y）：
 
 ```fish
-miyu pkg install ./miyu-migrate-0.1.0-linux-x86_64.miyu
+miyu pkg install ./miyu-migrate-0.1.1-linux-x86_64.miyu
 ```
 
 或者等它进了官方源：
