@@ -86,7 +86,7 @@ fn the_conversation_database_is_read_in_order() {
     assert!(read(&bare).unwrap().is_empty(), "没有这张表的是空的");
 }
 
-/// 假核心：`package.list` 里有没有赞助插件照 `installed`；`package.call` 照 `answer` 答或者拒。
+/// 假核心：`package.list` 里有没有赞助插件照 `installed`；`bus.call` 照 `answer` 答或者拒。
 struct Fake {
     installed: bool,
     answer: Result<Value, &'static str>,
@@ -105,7 +105,7 @@ impl Core for Fake {
                 };
                 Ok(json!({"packages": packages}))
             }
-            "package.call" => self.answer.clone().map_err(|code| Said {
+            "bus.call" => self.answer.clone().map_err(|code| Said {
                 code: code.to_string(),
                 message: "entries[1]: amount must be positive".to_string(),
             }),
@@ -133,11 +133,19 @@ fn the_plugin_takes_the_entries_or_the_report_says_why_not() {
     };
     let item = migrate(&mut core, &layout).unwrap();
     assert_eq!(item.migrated, 3);
-    assert!(item.note.unwrap().contains("新加 1 笔，2 笔账本里本来就有"));
+    assert!(
+        item.note
+            .as_deref()
+            .unwrap()
+            .contains("新加 1 笔，2 笔账本里本来就有")
+    );
     let (method, params) = &core.calls[1];
-    assert_eq!(method, "package.call");
-    assert_eq!(params["package"], SPONSOR);
+    // 施工 MG-17：照总线上的名字调，核心拼成插件清单里导出的 `sponsor.import`；不写插件的包编号。
+    assert_eq!(method, "bus.call");
+    assert_eq!(params["name"], "sponsor");
     assert_eq!(params["method"], "import");
+    assert!(params.get("package").is_none(), "{params}");
+    assert_eq!(item.target.as_deref(), Some("bus.call sponsor.import"));
     assert_eq!(params["params"]["entries"].as_array().unwrap().len(), 3);
 
     let mut missing = Fake {
@@ -162,6 +170,34 @@ fn the_plugin_takes_the_entries_or_the_report_says_why_not() {
             .unwrap()
             .contains("bad_params：entries[1]: amount must be positive")
     );
+}
+
+#[test]
+fn an_old_plugin_or_an_old_core_is_told_apart_from_a_refusal() {
+    // 施工 MG-17：插件装着但是旧的（总线上没有 `sponsor`、没登记 `sponsor.import`）、核心是旧的（不认 `bus.call`），报告写清楚
+    // 升级哪一个；不退回旧名字再试。
+    let (_dir, layout) = old_root(2);
+    for (code, upgrade) in [
+        ("no_provider", "把赞助插件 `miyu-im-sponsor` 升级"),
+        ("unregistered", "把赞助插件 `miyu-im-sponsor` 升级"),
+        ("not_exported", "把赞助插件 `miyu-im-sponsor` 升级"),
+        ("unknown_method", "把 Miyu 升级"),
+    ] {
+        let mut old = Fake {
+            installed: true,
+            answer: Err(code),
+            calls: Vec::new(),
+        };
+        let item = migrate(&mut old, &layout).unwrap();
+        assert_eq!(item.status, Status::Archived, "{code}");
+        assert_eq!(item.migrated, 0, "{code}");
+        let note = item.note.unwrap();
+        assert!(note.starts_with("2 笔赞助记录"), "{code}：{note}");
+        assert!(note.contains(upgrade), "{code}：{note}");
+        assert!(note.contains("重跑迁移"), "{code}：{note}");
+        assert!(note.contains(code), "{code}：{note}");
+        assert_eq!(old.calls.len(), 2, "{code}：问一次就停，不退回旧名字再试");
+    }
 }
 
 #[test]
