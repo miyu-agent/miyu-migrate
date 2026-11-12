@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 # 跟 miyu-migrate/package.toml 的版本走（施工 MG-16）：报告的 `migrate`、会话包里的 `miyu-migrate <版本>` 读的是它，
 # 发版改清单版本时这里一起改；`version_matches_the_package_manifest` 守着两边一样。
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.97"
 license = "AGPL-3.0-or-later"
