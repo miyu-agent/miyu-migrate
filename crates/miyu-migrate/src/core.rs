@@ -11,7 +11,7 @@ use miyu_client::open;
 use miyu_client::places::DataRoot;
 
 /// 握手报的头。
-pub const HEAD: &str = "miyu-migrate";
+pub const HEAD: &str = "migrate";
 
 /// 一问一答。
 pub trait Core {

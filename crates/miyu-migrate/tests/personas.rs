@@ -59,7 +59,7 @@ fn read(core: &mut Live, persona: &str, prompt: &str) -> Value {
 fn personas_land_in_the_core_once() {
     let fresh = fresh();
     let old = old_root();
-    let state = fresh.root.path().join("var/lib/miyu-migrate");
+    let state = fresh.root.path().join("var/lib/migrate");
     let mut core = connect(&fresh.root);
     let done = run::run(
         &plan(

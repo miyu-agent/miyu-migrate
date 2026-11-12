@@ -3,7 +3,7 @@
 把旧版 Miyu（0.7.x）的数据目录迁进新版 Miyu。新版的软件包：装上以后多一条 `miyu migrate`。
 
 ```
-miyu pkg install miyu-migrate
+miyu pkg install migrate
 mv ~/.miyu ~/.miyu-0.7        # 先停掉旧版，再把旧目录挪开
 miyu migrate ~/.miyu-0.7
 ```
@@ -51,7 +51,7 @@ miyu migrate ~/.miyu-0.7
 - **文件**：旧版给你存的图片、文档、工具产出的产物（照会话分好）、工作目录，拷进新版的图片、文档、工作区目录；新版里已经有同名
   不一样的不覆盖，改名并列进报告。以前给别人的分享不迁。
 
-- **搜索脚本的登录态**：闲鱼的拷进新包 `miyu-scripts-goofish` 的状态目录（包装着的话）；知乎、小红书、B 站搜索新版还没有包，登录态
+- **搜索脚本的登录态**：闲鱼的拷进新包 `goofish` 的状态目录（包装着的话）；知乎、小红书、B 站搜索新版还没有包，登录态
   留在压缩包里；B 站开播的新包装上以后重新登录。报告里只写站点和条数，不写 cookie。
 
 - **赞助记录**：交 im 的赞助插件导进它的账本（原来的时刻、金额、汇率照旧），插件认得出已经有的，重跑不多；插件没装的报告写装上
@@ -75,17 +75,17 @@ miyu migrate ~/.miyu-0.7
 
 **一、装包**（二选一）
 
-本地的包文件（CI 打出来的，或者自己在仓库里把程序拷进 `miyu-migrate/bin/`、许可证拷进 `miyu-migrate/LICENSE` 以后用
-`miyu pkg pack miyu-migrate --target linux-x86_64` 打的 `.miyu`，路径换成实际的；装之前会问一句，答 Y）：
+本地的包文件（CI 打出来的，或者自己在仓库里把程序拷进 `migrate/bin/`、许可证拷进 `migrate/LICENSE` 以后用
+`miyu pkg pack migrate --target linux-x86_64` 打的 `.miyu`，路径换成实际的；装之前会问一句，答 Y）：
 
 ```fish
-miyu pkg install ./miyu-migrate-0.1.1-linux-x86_64.miyu
+miyu pkg install ./migrate-0.1.1-linux-x86_64.miyu
 ```
 
 或者等它进了官方源：
 
 ```fish
-miyu pkg install miyu-migrate
+miyu pkg install migrate
 ```
 
 装好看一眼能不能转交过去（只印用法，不动任何东西）：
@@ -143,7 +143,7 @@ ls ~/.cache/miyu-tui-home/root/documents/旧版\ Miyu\ 迁移/
 less ~/.cache/miyu-tui-home/root/documents/旧版\ Miyu\ 迁移/*/报告.md
 ```
 
-压缩包是旧目录唯一的整份备份，放在数据根里，`miyu pkg remove miyu-migrate` 不会删它；不要了自己删这个目录。
+压缩包是旧目录唯一的整份备份，放在数据根里，`miyu pkg remove migrate` 不会删它；不要了自己删这个目录。
 
 **六、出了问题怎么退**
 
@@ -171,7 +171,7 @@ mv ~/.cache/miyu-tui-home.before-migrate ~/.cache/miyu-tui-home
 - 知识库：`root/kb/legacy/`（整个「旧版知识库」）
 - 文件：`root/pictures/`、`root/documents/` 里报告列出的、`root/documents/旧版产物/`、`root/workspace/旧版/`（`root/documents/旧版 Miyu 迁移/`
   是压缩包和报告，不是迁过来的文件，别一起删）
-- 闲鱼登录态：`root/state/scripts/miyu-scripts-goofish/goofish/legacy/`
+- 闲鱼登录态：`root/state/scripts/goofish/goofish/legacy/`
 - 表情包：`miyu pkg remove legacy-memes-<库名>`（报告里写了是哪几个）
 
 人格、会话存档、记忆、配置和密钥、QQ 消息记录、赞助记录是经核心和 im 写进库里的，没有逐条撤的命令：要撤这几样，用上面的整个撤。

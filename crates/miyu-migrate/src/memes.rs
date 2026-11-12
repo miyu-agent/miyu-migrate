@@ -1,10 +1,10 @@
-//! 表情包（细则第七节）：旧版的用户库 `data/memes/<库>/`（`index.json` 加 `images/…`）每个做成一个 miyu-memes 的内容包
-//! `legacy-memes-<库>/`，miyu-memes 装着的经 `package.install {path}` 装上；没装的包目录留在这一次的目录里，报告写装上 miyu-memes
-//! 以后跑哪一行。同一个编号再装是换成新的，重跑不会多（miyu-memes 照图去重）。
+//! 表情包（细则第七节）：旧版的用户库 `data/memes/<库>/`（`index.json` 加 `images/…`）每个做成一个 memes 的内容包
+//! `legacy-memes-<库>/`，memes 装着的经 `package.install {path}` 装上；没装的包目录留在这一次的目录里，报告写装上 memes
+//! 以后跑哪一行。同一个编号再装是换成新的，重跑不会多（memes 照图去重）。
 //!
 //! - 出厂库不在数据根，不迁；用户库里只有 `disabled_ids`、只覆盖出厂条目（图不在这个库里）的没有自己的图，跳过、列进报告。
 //! - 一条写 `file`、`description`、`usage`、`reason`（「旧版表情包 <库>」，从聊天里收来的接上在哪、谁发的、什么时候收的）；
-//!   `description`、`usage` 有空的那条 miyu-memes 会跳过，这里先跳过、数出来。
+//!   `description`、`usage` 有空的那条 memes 会跳过，这里先跳过、数出来。
 
 use std::fs;
 use std::io;
@@ -18,7 +18,7 @@ use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
 
 /// 内容包给的那个软件。
-pub const MEMES: &str = "miyu-memes";
+pub const MEMES: &str = "memes";
 
 /// 旧格式一句话。
 const FORMAT: &str = "data/memes/<库>/index.json（{library, version 2, memes:[{id sha256:…, name {zh,en}, file images/…, mime_type, animated, description, usage, tags, origin {platform, conversation_kind, conversation_id, sender_id, sender_name, message_id, sent_at, collected_at}}], disabled_ids}）加 images/ 下的图";
@@ -70,7 +70,7 @@ pub struct Pack {
     pub left: Vec<(String, String)>,
 }
 
-/// 迁表情包：`copy` 的用户库做成包放在 `dir` 下，miyu-memes 装着的装上。交回报告的一项。
+/// 迁表情包：`copy` 的用户库做成包放在 `dir` 下，memes 装着的装上。交回报告的一项。
 ///
 /// # Errors
 ///
@@ -89,7 +89,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
         format: FORMAT.to_string(),
         migrated: 0,
         skipped: Vec::new(),
-        target: Some("package.install（miyu-memes 的内容包）".to_string()),
+        target: Some("package.install（memes 的内容包）".to_string()),
         note: None,
     };
     let mut libraries: Vec<PathBuf> = fs::read_dir(&memes)

@@ -1,5 +1,5 @@
-//! 表情包对真核心（进程里起）：miyu-memes 没装，迁移把包做好、留着那一行；做好的包核心认得出（`package.info {path}`），装得上，
-//! 装上以后是给 miyu-memes 的内容包。
+//! 表情包对真核心（进程里起）：memes 没装，迁移把包做好、留着那一行；做好的包核心认得出（`package.info {path}`），装得上，
+//! 装上以后是给 memes 的内容包。
 
 #![allow(clippy::unwrap_used, reason = "测试：读坏了就该停")]
 
@@ -34,7 +34,7 @@ fn the_package_is_made_and_the_core_takes_it() {
     let mut core = connect(&fresh.root);
     let plan = Plan {
         old: old.path().to_path_buf(),
-        state: fresh.root.path().join("var/lib/miyu-migrate"),
+        state: fresh.root.path().join("var/lib/migrate"),
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: fresh.root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
@@ -51,7 +51,7 @@ fn the_package_is_made_and_the_core_takes_it() {
         .find(|item| item["what"] == "memes")
         .unwrap()
         .clone();
-    assert_eq!(item["migrated"], 0, "miyu-memes 没装：{item}");
+    assert_eq!(item["migrated"], 0, "memes 没装：{item}");
     assert!(
         item["note"].as_str().unwrap().contains("miyu pkg install "),
         "{item}"

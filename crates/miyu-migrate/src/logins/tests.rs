@@ -84,10 +84,7 @@ fn goofish_goes_to_its_package_and_the_rest_is_reported() {
         whys,
         vec![
             ("cache/bilibili", "no-package"),
-            (
-                "cache/bilibili-live-stream",
-                "install:miyu-skills-bilibili-live-stream"
-            ),
+            ("cache/bilibili-live-stream", "install:bilibili-live-stream"),
             ("cache/zhihu-search", "no-package"),
         ]
     );

@@ -8,11 +8,11 @@ fn sample() -> Report {
         migrate: "0.1.0".to_string(),
         at: "2026-11-04T08:00:00Z".to_string(),
         archive: Some(Archive {
-            path: "/data/var/lib/miyu-migrate/run/miyu-0.7.tar.zst".to_string(),
+            path: "/data/var/lib/migrate/run/miyu-0.7.tar.zst".to_string(),
             sha256: "ab".repeat(32),
             files: 9351,
             bytes: 1_600_000_000,
-            manifest: "/data/var/lib/miyu-migrate/run/miyu-0.7.manifest.json".to_string(),
+            manifest: "/data/var/lib/migrate/run/miyu-0.7.manifest.json".to_string(),
         }),
         old_root: OldRoot {
             path: "/home/a/.miyu-0.7".to_string(),
@@ -86,7 +86,7 @@ fn the_agent_report_reads_back_the_same() {
 fn the_human_report_lists_only_what_was_left_behind() {
     let human = sample().human();
     assert!(
-        human.contains("/data/var/lib/miyu-migrate/run/miyu-0.7.tar.zst"),
+        human.contains("/data/var/lib/migrate/run/miyu-0.7.tar.zst"),
         "{human}"
     );
     assert!(

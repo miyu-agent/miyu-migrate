@@ -11,7 +11,7 @@ use crate::layout::Layout;
 use crate::report::{Item, Status};
 
 /// 赞助插件：`package.list` 里照它看装没装。
-pub const SPONSOR: &str = "miyu-im-sponsor";
+pub const SPONSOR: &str = "im-sponsor";
 
 /// 赞助插件在总线上提供的名字（im 施工 I-211）：导的时候照它调，不写插件的包编号。
 pub const BUS_NAME: &str = "sponsor";

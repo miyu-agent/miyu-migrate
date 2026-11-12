@@ -10,10 +10,10 @@ use super::*;
 
 #[test]
 fn old_packages_find_their_successors() {
-    assert_eq!(successor("weather"), Some("miyu-scripts-weather"));
-    assert_eq!(successor("miyu-scripts-tarot"), Some("miyu-scripts-tarot"));
-    assert_eq!(successor("office"), Some("miyu-skills-office"));
-    assert_eq!(successor("memes"), Some("miyu-memes"));
+    assert_eq!(successor("weather"), Some("weather"));
+    assert_eq!(successor("miyu-scripts-tarot"), Some("tarot"));
+    assert_eq!(successor("office"), Some("office"));
+    assert_eq!(successor("memes"), Some("memes"));
     assert_eq!(successor("zhihu-search"), None);
 }
 
@@ -136,7 +136,7 @@ fn own_skills_are_copied_and_the_rest_is_reported() {
             ("extensions/scripts/mine.py", "format"),
             (
                 "extensions/scripts/personas/default/juya_daily",
-                "install:miyu-scripts-juya-daily"
+                "install:juya-daily"
             ),
         ],
         "包装的、覆盖层、备份、缓存不算；有新包的提示装"
@@ -150,10 +150,7 @@ fn own_skills_are_copied_and_the_rest_is_reported() {
         .collect();
     assert_eq!(
         packages,
-        vec![
-            ("office", "install:miyu-skills-office"),
-            ("weather", "install:miyu-scripts-weather")
-        ]
+        vec![("office", "install:office"), ("weather", "install:weather")]
     );
 
     let again = migrate(&layout, new.path());

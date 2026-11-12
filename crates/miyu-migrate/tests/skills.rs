@@ -32,7 +32,7 @@ fn copied_skills_are_seen_by_the_core() {
     let mut core = connect(&fresh.root);
     let plan = Plan {
         old: old.path().to_path_buf(),
-        state: fresh.root.path().join("var/lib/miyu-migrate"),
+        state: fresh.root.path().join("var/lib/migrate"),
         at: "2026-11-04T08:00:00Z".parse().unwrap(),
         root: fresh.root.clone(),
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),

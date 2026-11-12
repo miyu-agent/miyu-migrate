@@ -178,9 +178,9 @@ fn an_old_plugin_or_an_old_core_is_told_apart_from_a_refusal() {
     // 升级哪一个；不退回旧名字再试。
     let (_dir, layout) = old_root(2);
     for (code, upgrade) in [
-        ("no_provider", "把赞助插件 `miyu-im-sponsor` 升级"),
-        ("unregistered", "把赞助插件 `miyu-im-sponsor` 升级"),
-        ("not_exported", "把赞助插件 `miyu-im-sponsor` 升级"),
+        ("no_provider", "把赞助插件 `im-sponsor` 升级"),
+        ("unregistered", "把赞助插件 `im-sponsor` 升级"),
+        ("not_exported", "把赞助插件 `im-sponsor` 升级"),
         ("unknown_method", "把 Miyu 升级"),
     ] {
         let mut old = Fake {

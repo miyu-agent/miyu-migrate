@@ -1,10 +1,10 @@
 //! 搜索脚本的登录态（细则第十节，第十一节已定第 5 条）：旧版 `cache/<工具>/` 里浏览器登录、cookie 这些。
 //!
 //! - `goofish-search/`：`session.json`（Playwright 的 storage_state）和监控票据 `<md5 前 12 位>.json` 拷进新版
-//!   `miyu-scripts-goofish` 的状态目录 `root/state/scripts/miyu-scripts-goofish/goofish/legacy/`；新包认不认这两种格式没核实，报告写清。
+//!   `goofish` 的状态目录 `root/state/scripts/goofish/goofish/legacy/`；新包认不认这两种格式没核实，报告写清。
 //!   包没装的不拷，提示装。
 //! - `zhihu-search/`、`xhs-search/`、`bilibili/`：新版没有对应的包，只列进报告，登录态留在压缩包里。
-//! - `bilibili-live-stream/`：新版有 `miyu-skills-bilibili-live-stream`，旧版的登录态格式没核实，不拷：报告提示装上新包、在里面重新登录。
+//! - `bilibili-live-stream/`：新版有 `bilibili-live-stream`，旧版的登录态格式没核实，不拷：报告提示装上新包、在里面重新登录。
 //! - `*.lock`、`login-qr.png` 不拷。登录态是凭据：报告只写文件名和条数；拷过去的 Unix 上是 0600（目录 0700）。
 
 use std::fs;
@@ -17,9 +17,9 @@ use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
 
 /// 闲鱼的新包。
-pub const GOOFISH: &str = "miyu-scripts-goofish";
+pub const GOOFISH: &str = "goofish";
 /// B 站开播的新包。
-pub const LIVE: &str = "miyu-skills-bilibili-live-stream";
+pub const LIVE: &str = "bilibili-live-stream";
 
 /// 迁登录态：读 `copy` 的 `cache/`，闲鱼的拷进新数据根 `root`（包装着的话）。交回报告的一项。
 ///

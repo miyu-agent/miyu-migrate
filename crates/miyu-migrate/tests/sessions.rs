@@ -202,12 +202,7 @@ fn agent(done: &run::Done) -> Value {
 }
 
 fn plan(fresh: &support::Fresh, old: &Path, at: &str) -> Plan {
-    plan_in(
-        fresh,
-        old,
-        at,
-        fresh.root.path().join("var/lib/miyu-migrate"),
-    )
+    plan_in(fresh, old, at, fresh.root.path().join("var/lib/migrate"))
 }
 
 /// 同 [`plan`]，状态目录是 `state`。

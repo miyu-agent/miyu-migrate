@@ -1,4 +1,4 @@
-//! 表情包：包编号照包的写法；来源写成一句；一个库做成包（只要自己的图，缺字的跳过，覆盖出厂的不算）；miyu-memes 装着的装上、
+//! 表情包：包编号照包的写法；来源写成一句；一个库做成包（只要自己的图，缺字的跳过，覆盖出厂的不算）；memes 装着的装上、
 //! 没装的留着包和那一行、核心拒了的写原因码。
 
 use serde_json::{Value, json};
@@ -73,7 +73,7 @@ fn a_library_becomes_a_content_package() {
         "名字照「语言到一句话」写：{manifest}"
     );
     assert!(
-        manifest.contains("[content.miyu-memes]\ndir = \"memes\""),
+        manifest.contains("[content.memes]\ndir = \"memes\""),
         "{manifest}"
     );
     let index: Value =
@@ -107,7 +107,7 @@ fn a_library_that_only_hides_or_overrides_shipped_memes_has_nothing_to_pack() {
     assert_eq!(pack(&dir, "miyu", out.path()).unwrap(), None);
 }
 
-/// 假核心：`package.list` 里有没有 miyu-memes 照 `installed`；`package.install` 照 `refuse` 拒或者收。
+/// 假核心：`package.list` 里有没有 memes 照 `installed`；`package.install` 照 `refuse` 拒或者收。
 struct Fake {
     installed: bool,
     refuse: Option<&'static str>,
@@ -181,7 +181,7 @@ fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
     assert!(
         item.note
             .unwrap()
-            .contains("miyu-memes 没装，装上以后跑 `miyu pkg install '")
+            .contains("memes 没装，装上以后跑 `miyu pkg install '")
     );
 
     let mut refused = Fake {

@@ -18,51 +18,51 @@ use serde_json::Value;
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
 
-/// 官方源里的包（软件源仓库 `names.toml` 的 `[names]`，2026-11-05 抄的）：旧版包管理器装的包照名字找新包。
+/// 官方源里的包（软件源仓库 `names.toml` 的 `[names]`，2026-11-05 抄的；11-12 起包编号不带 `miyu-`、`scripts-`、`skills-`）：
+/// 旧版包管理器装的包照名字找新包。
 pub const OFFICIAL: &[&str] = &[
-    "miyu-embed",
-    "miyu-im",
-    "miyu-im-sponsor",
-    "miyu-memes",
-    "miyu-render",
-    "miyu-scripts-ai-draw",
-    "miyu-scripts-archwiki-query",
-    "miyu-scripts-bangumi",
-    "miyu-scripts-calculator",
-    "miyu-scripts-codec",
-    "miyu-scripts-crack-search",
-    "miyu-scripts-deepseek-status",
-    "miyu-scripts-dice",
-    "miyu-scripts-douyin-dl",
-    "miyu-scripts-exchange-rate",
-    "miyu-scripts-fortune",
-    "miyu-scripts-game-compat",
-    "miyu-scripts-goofish",
-    "miyu-scripts-juya-daily",
-    "miyu-scripts-moegirl-query",
-    "miyu-scripts-online-man",
-    "miyu-scripts-reddit-search",
-    "miyu-scripts-tarot",
-    "miyu-scripts-weather",
-    "miyu-scripts-web-image",
-    "miyu-scripts-zhouyi",
-    "miyu-skills-aur-pkgbuild-review",
-    "miyu-skills-bilibili-live-stream",
-    "miyu-skills-office",
-    "miyu-skills-travel-planner",
+    "ai-draw",
+    "archwiki-query",
+    "aur-pkgbuild-review",
+    "bangumi",
+    "bilibili-live-stream",
+    "calculator",
+    "codec",
+    "crack-search",
+    "deepseek-status",
+    "dice",
+    "douyin-dl",
+    "embed",
+    "exchange-rate",
+    "fortune",
+    "game-compat",
+    "goofish",
+    "im",
+    "im-sponsor",
+    "juya-daily",
+    "memes",
+    "moegirl-query",
+    "ocr",
+    "office",
+    "online-man",
+    "reddit-search",
+    "render",
+    "tarot",
+    "travel-planner",
+    "weather",
+    "web-image",
+    "zhouyi",
 ];
 
 /// 旧版包管理器装的一个包、照名字找到的新包。
 pub fn successor(old: &str) -> Option<&'static str> {
     let old = old.trim().to_ascii_lowercase();
     let bare = old.strip_prefix("miyu-").unwrap_or(&old);
-    [
-        format!("miyu-scripts-{bare}"),
-        format!("miyu-skills-{bare}"),
-        format!("miyu-{bare}"),
-    ]
-    .into_iter()
-    .find_map(|name| OFFICIAL.iter().copied().find(|one| *one == name))
+    let bare = ["scripts-", "skills-"]
+        .iter()
+        .find_map(|prefix| bare.strip_prefix(prefix))
+        .unwrap_or(bare);
+    OFFICIAL.iter().copied().find(|one| *one == bare)
 }
 
 /// 迁完的样子：报告的几项。

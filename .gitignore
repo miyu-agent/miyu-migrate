@@ -1,4 +1,4 @@
 /target/
 /.worktrees/
 /dist/
-/miyu-migrate/bin/
+/migrate/bin/

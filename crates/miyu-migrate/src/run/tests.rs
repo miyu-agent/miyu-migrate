@@ -169,7 +169,7 @@ fn the_state_disk_needs_room_for_the_unpacked_copy_too() {
     let split = Plan {
         root: miyu_client::places::DataRoot::at(disk.path().to_path_buf()),
         space: state_tight,
-        ..plan(old.path(), &state.path().join("var/lib/miyu-migrate"))
+        ..plan(old.path(), &state.path().join("var/lib/migrate"))
     };
     match run(&split, &mut Fake) {
         // 解出来的那一份 9 个字节，状态目录还没建，问的是它已有的上一层。
@@ -178,7 +178,7 @@ fn the_state_disk_needs_room_for_the_unpacked_copy_too() {
             have: 3,
             at,
         }) => {
-            assert_eq!(at, state.path().join("var/lib/miyu-migrate"));
+            assert_eq!(at, state.path().join("var/lib/migrate"));
         }
         other => panic!("{other:?}"),
     }
@@ -283,7 +283,7 @@ fn the_same_kind_of_extra_is_one_section_listing_every_file() {
 /// 原来一直是 0.0.0，主人看报告会以为装错了。发版只改了清单、忘了改 Cargo.toml 时这条红。
 #[test]
 fn version_matches_the_package_manifest() {
-    let manifest = include_str!("../../../../miyu-migrate/package.toml");
+    let manifest = include_str!("../../../../migrate/package.toml");
     let declared = manifest
         .lines()
         .find_map(|line| {

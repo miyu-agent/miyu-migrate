@@ -89,7 +89,7 @@ fn rehearse() {
     let scratch =
         PathBuf::from(std::env::var_os("MIYU_MIGRATE_SCRATCH").expect("MIYU_MIGRATE_SCRATCH"));
     let fresh = support::fresh_in(&scratch);
-    let state = fresh.root.path().join("var/lib/miyu-migrate");
+    let state = fresh.root.path().join("var/lib/migrate");
     let mut core = support::connect(&fresh.root);
     let plan = |at: &str| Plan {
         old: old.clone(),
