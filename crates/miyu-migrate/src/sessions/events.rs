@@ -125,7 +125,7 @@ pub fn build(head: &Head<'_>, session: &Session, turns: &[Turn], attached: &Atta
     let mut body = json!({
         "venue": head.venue,
         "policy": head.policy,
-        "permission": {"level": "workspace", "read_only": false},
+        "permission": {"level": "full", "read_only": false},
         "titles": false,
     });
     if let Some(persona) = head.persona {

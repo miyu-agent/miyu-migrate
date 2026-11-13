@@ -26,6 +26,11 @@ fn a_plain_turn_is_said_started_replied_and_ended() {
     );
     assert_eq!(events[0]["body"]["persona"], "persona-1");
     assert_eq!(events[0]["body"]["titles"], false);
+    // 级别写完全放开（MG-20）：核心只剩只读、完全放开两级，以前写的 `workspace` 核心不再认，写它导进来的会话是只读的。
+    assert_eq!(
+        events[0]["body"]["permission"],
+        json!({"level": "full", "read_only": false})
+    );
     assert_eq!(events[0]["at"], "2026-09-25T07:00:00.000Z");
     assert_eq!(events[1]["body"]["title"], "旧名字");
     assert_eq!(events[2]["body"]["blocks"][0]["text"], "给人看的");
