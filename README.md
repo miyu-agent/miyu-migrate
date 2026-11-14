@@ -3,10 +3,12 @@
 把旧版 Miyu（0.7.x）的数据目录迁进新版 Miyu。新版的软件包：装上以后多一条 `miyu migrate`。
 
 ```
+mv ~/.miyu ~/.miyu-0.7        # 先停掉旧版，再把旧目录挪开：旧目录占着 ~/.miyu 时新版核心起不来
 miyu pkg install migrate
-mv ~/.miyu ~/.miyu-0.7        # 先停掉旧版，再把旧目录挪开
 miyu migrate ~/.miyu-0.7
 ```
+
+一步步怎么做、迁了什么、没迁什么、出了问题怎么办，见 [从 0.7 旧版迁过来](https://github.com/miyu-agent/miyu/blob/main/docs/guide/migrate.md)。
 
 它先把旧目录整个打成压缩包、逐个文件核对，然后只从解出来的副本读，经新版核心的协议写进去，最后出两份报告：一份给人看，
 一份给 agent 读（写明没迁的东西在压缩包里的哪个路径、旧格式是什么样，要的时候让 agent 接着迁）。旧目录不动。压缩包和报告放在
@@ -26,14 +28,14 @@ miyu migrate ~/.miyu-0.7
   - QQ 里的会话导成那个群、那个私聊的存档（和新版的 QQ 会话一样不进会话列表，回合库记得是哪个群）：群里的一轮照每行开头的
     号拆成每个人说的话，私聊是对方说的。
   - 旧版压缩时搬走的轮（`evicted_context.db`）照时刻插回原来的会话；原来的会话不在了的，照人格归进一个「旧版被挤出的对话」。
-  - 工具出的图、内嵌给模型看的图、溢出的长输出接在那一条工具结果后面；她问你的问题（`ask_user`）、你中途插的话、只留了展示转录
+  - 工具出的图、内嵌给模型看的图、溢出的长输出接在那一条工具结果后面；AI 问你的问题（`ask_user`）、你中途插的话、只留了展示转录
     的工具来回都在；子代理的会话作子会话，和它的主会话一起导。
 
 - **QQ 消息记录**：旧版记下的群聊、私聊消息转成 im 收的写法（这一次的目录里的 `qq-records.jsonl`），交 `miyu im records import`
   导进 im 的库；im 认得出已经有的（重跑、新 im 并行接过的那一段），不会多出来。im 没装的，报告里写装上以后跑哪一行。
 
 - **记忆**：每个旧人格记下的知识点导进映射到的那个新人格（原来记下的时刻留着），说的是别人的记成那个人的，说的是你的记成你的；
-  她自己的、超过 120 字的不导，报告里写在压缩包的哪一行。导完让新版整理一次，合掉和已经记下的重复。重跑不会重复导，删掉的也不会
+  AI 自己的、超过 120 字的不导，报告里写在压缩包的哪一行。导完让新版整理一次，合掉和已经记下的重复。重跑不会重复导，删掉的也不会
   导回来。
 
 - **配置和密钥**：供应商（地址、key、模型的窗口、温度、价格）、主对话和看图的模型、子代理的几个池、搜索的 key、关于你、你的 QQ 号，
@@ -62,6 +64,8 @@ miyu migrate ~/.miyu-0.7
   可以删旧目录（删由你自己来）。
 
 新版核心一个字节都不认旧格式：旧用户都迁完以后，这个包下架、仓库归档。
+
+下面一节是维护者在自己机器上的操作记录，不是给用户的步骤。
 
 ## 主人在真数据根上跑
 
@@ -180,8 +184,10 @@ mv ~/.cache/miyu-tui-home.before-migrate ~/.cache/miyu-tui-home
 
 ```
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 ```
+
+和 CI（`.github/workflows/ci.yml`，Linux、macOS、Windows 三台）跑的一样。
 
 许可证：AGPL-3.0-or-later，见 `LICENSE`。
