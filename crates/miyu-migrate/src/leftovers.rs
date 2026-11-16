@@ -4,7 +4,8 @@
 //! - 留在压缩包里的（`archived`）：用量、上键历史、成员的家目录（只数个数）、QQ 的图片文件头像、平台的表、记忆的经历和旧向量、配置的
 //!   手动备份、网页、语音、定时提醒、别的旧状态。
 //! - 派生的（`skipped`，`what` 以 `derived/` 开头）：新版自己重建，给人看的报告合成一行。
-//! - 数据根外面的（`skipped`，`what` 以 `outside/` 开头）：只报在不在，删不删由人定；`~/.local/bin/miyu` 是新版包装脚本的照实说。
+//! - 数据根外面的（`skipped`，`what` 以 `outside/` 开头）：只报在不在，删不删由人定；`~/.local/bin/miyu` 是新版的（安装脚本链到
+//!   `~/.local/lib/miyu/` 的、写着 miyu-remake 的包装脚本）照实说。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -388,18 +389,16 @@ fn memory(copy: &Layout) -> Option<Item> {
     })
 }
 
-/// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版包装脚本（里面写着 miyu-remake）的照实说。
+/// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版的照实说（[`is_new_miyu`]）。
 fn outside(home: &Path) -> Vec<Item> {
     OUTSIDE
         .iter()
         .filter(|path| home.join(path).exists())
         .map(|path| {
             let full = home.join(path);
-            let newer = *path == ".local/bin/miyu"
-                && fs::read(&full)
-                    .is_ok_and(|bytes| String::from_utf8_lossy(&bytes).contains("miyu-remake"));
+            let newer = *path == ".local/bin/miyu" && is_new_miyu(home, &full);
             let note = if newer {
-                "这是新版的包装脚本，不是旧版的，别删。".to_string()
+                "这是新版的 miyu，不是旧版的，别删。".to_string()
             } else {
                 "旧版装过这个，确认是旧版的、用不着了再删；删不删由你定。".to_string()
             };
@@ -415,6 +414,19 @@ fn outside(home: &Path) -> Vec<Item> {
             }
         })
         .collect()
+}
+
+/// `~/.local/bin/miyu` 是不是新版的：先解开链接，落在 `~/.local/lib/miyu/` 下、旁边有 `install.toml` 的是新版安装脚本装的
+/// （它装的是链接，程序本体里没有 `miyu-remake` 字样）；照旧是一个文件的，里面写着 `miyu-remake` 的是早先的新版包装脚本。
+/// 不跑这个程序（不问 `--version`）：认错了顶多叫人多看一眼，跑一个不知道是什么的程序不值。
+fn is_new_miyu(home: &Path, bin: &Path) -> bool {
+    let lib = home.join(".local/lib/miyu");
+    let installed = fs::canonicalize(bin)
+        .ok()
+        .zip(fs::canonicalize(&lib).ok())
+        .is_some_and(|(real, lib)| real.starts_with(&lib) && lib.join("install.toml").is_file());
+    installed
+        || fs::read(bin).is_ok_and(|bytes| String::from_utf8_lossy(&bytes).contains("miyu-remake"))
 }
 
 fn item(

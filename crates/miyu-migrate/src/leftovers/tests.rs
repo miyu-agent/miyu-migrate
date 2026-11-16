@@ -1,5 +1,5 @@
 //! 零碎：在的才进报告（大小、条数、提醒还没到点的）；成员只数个数；平台的表照插件数；记忆的经历和旧向量照人格数；数据根外面的照实说，
-//! 新版的包装脚本不叫人删。
+//! 新版的 miyu（安装脚本的链接、早先的包装脚本）不叫人删。
 
 use std::fs;
 
@@ -126,7 +126,7 @@ fn outside_things_are_reported_and_the_new_wrapper_is_kept() {
     let wrapper = find(&items, "outside/.local/bin/miyu");
     assert_eq!(
         wrapper.note.as_deref(),
-        Some("这是新版的包装脚本，不是旧版的，别删。")
+        Some("这是新版的 miyu，不是旧版的，别删。")
     );
     let fish = find(&items, "outside/.config/fish/conf.d/miyu.fish");
     assert!(fish.note.as_deref().unwrap().contains("确认是旧版的"));
@@ -136,6 +136,44 @@ fn outside_things_are_reported_and_the_new_wrapper_is_kept() {
             .any(|item| item.what == "outside/.local/state/miyu"),
         "不在的不报"
     );
+}
+
+/// 新版安装脚本装的 `~/.local/bin/miyu` 是链接，指到 `~/.local/lib/miyu/miyu`（旁边有 `install.toml`），程序本体里没有
+/// `miyu-remake` 字样，也认成新版；链到别处的照旧当旧版报。
+#[cfg(unix)]
+#[test]
+fn a_link_into_the_installed_lib_is_the_new_version() {
+    let (_old, layout) = old_root();
+    let home = tempfile::tempdir().unwrap();
+    let lib = home.path().join(".local/lib/miyu");
+    write(&lib.join("miyu"), b"\x7fELF not a wrapper");
+    write(&lib.join("install.toml"), b"channel = \"script\"\n");
+    fs::create_dir_all(home.path().join(".local/bin")).unwrap();
+    std::os::unix::fs::symlink(lib.join("miyu"), home.path().join(".local/bin/miyu")).unwrap();
+    let listed = items(&layout, Some(home.path()));
+    let note = find(&listed, "outside/.local/bin/miyu")
+        .note
+        .clone()
+        .unwrap();
+    assert!(
+        note.contains("别删") && !note.contains("确认是旧版的"),
+        "{note}"
+    );
+
+    let other = tempfile::tempdir().unwrap();
+    write(&other.path().join("old/miyu"), b"\x7fELF old");
+    fs::create_dir_all(other.path().join(".local/bin")).unwrap();
+    std::os::unix::fs::symlink(
+        other.path().join("old/miyu"),
+        other.path().join(".local/bin/miyu"),
+    )
+    .unwrap();
+    let listed = items(&layout, Some(other.path()));
+    let note = find(&listed, "outside/.local/bin/miyu")
+        .note
+        .clone()
+        .unwrap();
+    assert!(note.contains("确认是旧版的"), "{note}");
 }
 
 #[test]
