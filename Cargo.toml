@@ -27,21 +27,21 @@ tokio = { version = "1", features = ["rt"] }
 # 打包前看状态目录那块盘还剩多少（三个平台）。
 fs4 = "0.13"
 # 新核心：连核心的门面，钉在一个提交上，核心改了格式跟着它的版本重编（细则第十四节）。
-miyu-client = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-client = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
 # 事件、编号（Event::from_line 读一遍再写）；会话日志、blob 库、原始包（细则第十四节：清单、包都照核心的写法）。
-miyu-kernel = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-kernel = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
 # 读旧会话库：SQLite，同核心一样自己带源码编（三个平台一样）。
 rusqlite = { version = "0.40", features = ["bundled"] }
 # 旧附件的图片认大小（图片块要宽高）。
 imagesize = "0.14"
 # 测试里在进程里起真核心（照 miyu-im 测试的起法），同一个提交。
-miyu-endpoint = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-endpoint = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
 # 测试里的核心照真核心起来时那样拼配置清单（包声明的项：供应商、模型、搜索……），同 miyu-im 的测试；搜索的项在 `net` 里。
-miyu-core = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f", default-features = false, features = ["net"] }
-miyu-session = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
-miyu-ipc = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
-miyu-store = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
-miyu-tool = { git = "https://github.com/miyu-agent/miyu", rev = "65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f" }
+miyu-core = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942", default-features = false, features = ["net"] }
+miyu-session = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
+miyu-ipc = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
+miyu-store = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
+miyu-tool = { git = "https://github.com/miyu-agent/miyu", rev = "70e9ab92ec2c78c041f9e12077d0f7d176d59942" }
 
 # 同核心（核心仓库根目录的 Cargo.toml，理由见核心的施工单 0-1「我定的」）。
 [workspace.lints.rust]
