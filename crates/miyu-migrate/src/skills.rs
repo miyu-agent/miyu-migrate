@@ -17,6 +17,7 @@ use serde_json::Value;
 
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
 
 /// 官方源里的包（软件源仓库 `names.toml` 的 `[names]`，2026-11-05 抄的；11-12 起包编号不带 `miyu-`、`scripts-`、`skills-`）：
 /// 旧版包管理器装的包照名字找新包。
@@ -77,7 +78,8 @@ pub struct Moved {
 }
 
 /// 迁技能、报脚本和包：读 `copy`，技能拷进新数据根 `root`（`<它>/root/skills/`）。
-pub fn migrate(copy: &Layout, root: &Path) -> Moved {
+pub fn migrate(copy: &Layout, root: &Path, language: Language) -> Moved {
+    let words = crate::words::packages::skills(language);
     let locked = lock(copy);
     let files: BTreeSet<PathBuf> = locked
         .iter()
@@ -95,10 +97,10 @@ pub fn migrate(copy: &Layout, root: &Path) -> Moved {
         what: "skills".to_string(),
         status: Status::Migrated,
         source: relative(&skills_dir),
-        format: "一个技能一个目录：SKILL.md（YAML 头 name、description）加资源；personas/<scope>/<名字>/ 是人格层；.disabled 是停用".to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
-        target: Some("root/skills/<名字>/".to_string()),
+        target: Some(words.target.to_string()),
         note: None,
     };
     let mut notes = Vec::new();
@@ -121,17 +123,13 @@ pub fn migrate(copy: &Layout, root: &Path) -> Moved {
                     .and_then(|name| name.to_str())
                     .unwrap_or_default();
                 if name != original {
-                    notes.push(format!("`{shown}` 新版里叫 `{name}`。"));
+                    notes.push((words.renamed)(&shown, &name));
                 }
                 if let Some(scope) = &owner {
-                    notes.push(format!(
-                        "`{name}` 原来是人格 `{scope}` 的（新版的技能不分人格）。"
-                    ));
+                    notes.push((words.persona_owned)(&name, scope));
                 }
                 if dir.join(".disabled").exists() {
-                    notes.push(format!(
-                        "`{name}` 原来停用了，新版里是开着的，不要的在设置里关掉。"
-                    ));
+                    notes.push((words.disabled)(&name));
                 }
             }
             Err(error) => skills
@@ -142,9 +140,9 @@ pub fn migrate(copy: &Layout, root: &Path) -> Moved {
     if !skills.skipped.iter().all(|one| one.why == "package") {
         skills.status = Status::Partial;
     }
-    skills.note = (!notes.is_empty()).then(|| notes.join(""));
-    let scripts = scripts(copy, &files, relative(&copy.scripts()));
-    let packages = packages(&locked);
+    skills.note = (!notes.is_empty()).then(|| language.sentences(&notes));
+    let scripts = scripts(copy, &files, relative(&copy.scripts()), language);
+    let packages = packages(&locked, language);
     Moved {
         skills,
         scripts,
@@ -324,7 +322,8 @@ pub fn rename(text: &str, name: &str) -> String {
 
 /// 自己的脚本：不是包装的、不是 `index.json`、备份、`__pycache__` 的普通文件，原样留着、列名字；名字对得上官方源里一个新包的
 /// （照文件名去掉扩展名、`_` 换 `-` 找），提示装那个包。
-fn scripts(copy: &Layout, files: &BTreeSet<PathBuf>, source: String) -> Item {
+fn scripts(copy: &Layout, files: &BTreeSet<PathBuf>, source: String, language: Language) -> Item {
+    let words = crate::words::packages::skills(language);
     let dir = copy.scripts();
     let mut mine: Vec<String> = walkdir::WalkDir::new(&dir)
         .into_iter()
@@ -364,25 +363,33 @@ fn scripts(copy: &Layout, files: &BTreeSet<PathBuf>, source: String) -> Item {
     let rest = skipped.iter().filter(|one| one.why == "format").count();
     let mut note = Vec::new();
     if !ported.is_empty() {
-        note.push(format!("有新包的到官方源装：{}。", ported.join("；")));
+        note.push((words.ported)(&ported.join(language.semicolon())));
     }
     if rest > 0 {
-        note.push(format!("{rest} 个自己写的脚本新版的格式不一样，原样留在压缩包里；要的时候照新版的写法（`docs/authors/scripts-skills.md`）改，或者让 agent 照 `给agent.json` 改。"));
+        note.push((words.scripts_left)(
+            rest,
+            crate::words::report::words(language).agent_file,
+        ));
     }
     Item {
         what: "scripts".to_string(),
-        status: if skipped.is_empty() { Status::Skipped } else { Status::Archived },
+        status: if skipped.is_empty() {
+            Status::Skipped
+        } else {
+            Status::Archived
+        },
         source,
-        format: "一个脚本一个文件，头部注释写说明和参数，index.json 是覆盖层（id、path、parameters、load_policy……）；personas/<scope>/ 是人格层".to_string(),
+        format: words.scripts_format.to_string(),
         migrated: 0,
         skipped,
         target: None,
-        note: (!note.is_empty()).then(|| note.join("")),
+        note: (!note.is_empty()).then(|| language.sentences(&note)),
     }
 }
 
 /// 包管理器装的包：列名字，有新包的提示装。
-fn packages(locked: &[(String, Vec<PathBuf>)]) -> Item {
+fn packages(locked: &[(String, Vec<PathBuf>)], language: Language) -> Item {
+    let words = crate::words::packages::skills(language);
     let mut lines = Vec::new();
     let mut skipped = Vec::new();
     for (name, _) in locked {
@@ -392,20 +399,24 @@ fn packages(locked: &[(String, Vec<PathBuf>)]) -> Item {
                 skipped.push(skip(name, &format!("install:{new}")));
             }
             None => {
-                lines.push(format!("`{name}` 新版没有对应的包"));
+                lines.push((words.no_package)(name));
                 skipped.push(skip(name, "no-package"));
             }
         }
     }
     Item {
         what: "packages".to_string(),
-        status: if locked.is_empty() { Status::Skipped } else { Status::Archived },
+        status: if locked.is_empty() {
+            Status::Skipped
+        } else {
+            Status::Archived
+        },
         source: "extensions/pm/lock.json".to_string(),
-        format: "JSON：{packages: {<包名>: {source, version, kind extension/persona, files [相对旧根的路径]}}}".to_string(),
+        format: words.packages_format.to_string(),
         migrated: 0,
         skipped,
-        target: Some("官方源".to_string()),
-        note: (!lines.is_empty()).then(|| format!("旧版包管理器装的包不拷，到官方源装新的：{}。", lines.join("；"))),
+        target: Some(words.packages_target.to_string()),
+        note: (!lines.is_empty()).then(|| (words.packages)(&lines.join(language.semicolon()))),
     }
 }
 

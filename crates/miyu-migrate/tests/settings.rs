@@ -65,6 +65,7 @@ fn old_settings_fill_the_new_config_without_printing_keys() {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     let done = run::run(&plan, &mut core).unwrap();
     for report in [&done.human, &done.agent] {

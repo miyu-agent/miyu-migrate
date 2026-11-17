@@ -59,23 +59,24 @@ pub enum LayoutError {
     Io(PathBuf, io::Error),
 }
 
+impl LayoutError {
+    /// 照语言说一句（字在 [`crate::words::cli`]）。
+    #[must_use]
+    pub fn say(&self, language: crate::words::Language) -> String {
+        let words = crate::words::cli::words(language);
+        match self {
+            LayoutError::NotADirectory(path) => (words.not_a_directory)(path),
+            LayoutError::NotOld(path) => (words.not_old)(path),
+            LayoutError::Unfinished(path) => (words.unfinished)(path),
+            LayoutError::BadAdmin(name) => (words.bad_admin)(name),
+            LayoutError::Io(path, error) => (words.cannot_read)(path, &error.to_string()),
+        }
+    }
+}
+
 impl fmt::Display for LayoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LayoutError::NotADirectory(path) => write!(f, "{} is not a directory", path.display()),
-            LayoutError::NotOld(path) => {
-                write!(f, "{} is not an old Miyu data folder", path.display())
-            }
-            LayoutError::Unfinished(path) => write!(
-                f,
-                "old Miyu did not finish moving its files ({}); start the old version once to let it recover",
-                path.display()
-            ),
-            LayoutError::BadAdmin(name) => {
-                write!(f, "the home layout marker names an invalid user: {name:?}")
-            }
-            LayoutError::Io(path, error) => write!(f, "cannot read {}: {error}", path.display()),
-        }
+        f.write_str(&self.say(crate::words::Language::En))
     }
 }
 

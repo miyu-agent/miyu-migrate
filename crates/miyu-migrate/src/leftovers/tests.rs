@@ -1,5 +1,5 @@
 //! 零碎：在的才进报告（大小、条数、提醒还没到点的）；成员只数个数；平台的表照插件数；记忆的经历和旧向量照人格数；数据根外面的照实说，
-//! 新版的包装脚本不叫人删。
+//! 新版的 miyu（安装脚本的链接、早先的包装脚本）不叫人删。
 
 use std::fs;
 
@@ -67,7 +67,7 @@ fn find<'a>(items: &'a [Item], what: &str) -> &'a Item {
 #[test]
 fn leftovers_are_listed_with_where_and_how_many() {
     let (_old, layout) = old_root();
-    let items = items(&layout, None);
+    let items = items(&layout, None, Language::Zh);
     let whats: Vec<&str> = items.iter().map(|item| item.what.as_str()).collect();
     assert!(!whats.contains(&"usage"), "没有的不进：{whats:?}");
     let history = find(&items, "repl-history");
@@ -122,11 +122,11 @@ fn outside_things_are_reported_and_the_new_wrapper_is_kept() {
         b"#!/bin/sh\n# miyu-remake wrapper\n",
     );
     write(&home.path().join(".config/fish/conf.d/miyu.fish"), b"");
-    let items = items(&layout, Some(home.path()));
+    let items = items(&layout, Some(home.path()), Language::Zh);
     let wrapper = find(&items, "outside/.local/bin/miyu");
     assert_eq!(
         wrapper.note.as_deref(),
-        Some("这是新版的包装脚本，不是旧版的，别删。")
+        Some("这是新版的 miyu，不是旧版的，别删。")
     );
     let fish = find(&items, "outside/.config/fish/conf.d/miyu.fish");
     assert!(fish.note.as_deref().unwrap().contains("确认是旧版的"));
@@ -138,9 +138,74 @@ fn outside_things_are_reported_and_the_new_wrapper_is_kept() {
     );
 }
 
+/// 新版安装脚本装的 `~/.local/bin/miyu` 是链接，指到 `~/.local/lib/miyu/miyu`（旁边有 `install.toml`），程序本体里没有
+/// `miyu-remake` 字样，也认成新版；链到别处的照旧当旧版报。
+#[cfg(unix)]
+#[test]
+fn a_link_into_the_installed_lib_is_the_new_version() {
+    let (_old, layout) = old_root();
+    let home = tempfile::tempdir().unwrap();
+    let lib = home.path().join(".local/lib/miyu");
+    write(&lib.join("miyu"), b"\x7fELF not a wrapper");
+    write(&lib.join("install.toml"), b"channel = \"script\"\n");
+    fs::create_dir_all(home.path().join(".local/bin")).unwrap();
+    std::os::unix::fs::symlink(lib.join("miyu"), home.path().join(".local/bin/miyu")).unwrap();
+    let listed = items(&layout, Some(home.path()), Language::Zh);
+    let note = find(&listed, "outside/.local/bin/miyu")
+        .note
+        .clone()
+        .unwrap();
+    assert!(
+        note.contains("别删") && !note.contains("确认是旧版的"),
+        "{note}"
+    );
+
+    let other = tempfile::tempdir().unwrap();
+    write(&other.path().join("old/miyu"), b"\x7fELF old");
+    fs::create_dir_all(other.path().join(".local/bin")).unwrap();
+    std::os::unix::fs::symlink(
+        other.path().join("old/miyu"),
+        other.path().join(".local/bin/miyu"),
+    )
+    .unwrap();
+    let listed = items(&layout, Some(other.path()), Language::Zh);
+    let note = find(&listed, "outside/.local/bin/miyu")
+        .note
+        .clone()
+        .unwrap();
+    assert!(note.contains("确认是旧版的"), "{note}");
+}
+
 #[test]
 fn sizes_read_like_people_write_them() {
-    assert_eq!(human_size(512), "512 字节");
-    assert_eq!(human_size(2048), "2.0 KB");
-    assert_eq!(human_size(3 * 1_048_576), "3.0 MB");
+    assert_eq!(Language::Zh.human_size(512), "512 字节");
+    assert_eq!(Language::Zh.human_size(2048), "2.0 KB");
+    assert_eq!(Language::Zh.human_size(3 * 1_048_576), "3.0 MB");
+}
+
+/// 英文的零碎（施工 MG-21）：每一样的来源、旧格式、备注里都没有汉字（造的旧根、临时家目录里没有中文名字）。
+#[test]
+fn leftovers_read_in_english_when_asked() {
+    let (_old, layout) = old_root();
+    let home = tempfile::tempdir().unwrap();
+    write(&home.path().join(".config/fish/conf.d/miyu.fish"), b"");
+    let listed = items(&layout, Some(home.path()), Language::En);
+    assert!(listed.len() > 5, "{listed:?}");
+    for item in &listed {
+        // 几份的来源照旧用「、」并（给 agent 的那份的格式不变），给人看的报告里英文换成逗号。
+        let source = item.source.replace('、', ", ");
+        for text in [&source, &item.format, item.note.as_ref().unwrap()] {
+            assert!(
+                !text
+                    .chars()
+                    .any(|one| ('\u{4e00}'..='\u{9fff}').contains(&one)
+                        || "，。；：（）、".contains(one)),
+                "{}：{text}",
+                item.what
+            );
+        }
+    }
+    let alarms = find(&listed, "alarms").note.clone().unwrap();
+    assert!(alarms.contains("2 reminder(s), 1 not due yet."), "{alarms}");
+    assert_eq!(Language::En.human_size(512), "512 bytes");
 }

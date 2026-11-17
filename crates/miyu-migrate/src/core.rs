@@ -84,6 +84,14 @@ impl Live {
     }
 }
 
+impl Live {
+    /// 握手回的 `language`（`zh`、`en`、`ja`：核心照界面语言、头报的系统语言算）；核心没回的是空的。
+    #[must_use]
+    pub fn language(&self) -> Option<&str> {
+        self.core.language()
+    }
+}
+
 impl Core for Live {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, Said> {
         self.next += 1;

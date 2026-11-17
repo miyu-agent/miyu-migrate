@@ -155,6 +155,7 @@ fn tool_extras_questions_queued_replays_and_children_come_along() {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     let done = run::run(&plan, &mut core).unwrap();
     let agent: Value = serde_json::from_str(&std::fs::read_to_string(done.agent).unwrap()).unwrap();

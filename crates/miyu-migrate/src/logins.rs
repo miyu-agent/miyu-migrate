@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
 
 /// 闲鱼的新包。
 pub const GOOFISH: &str = "goofish";
@@ -26,13 +27,19 @@ pub const LIVE: &str = "bilibili-live-stream";
 /// # Errors
 ///
 /// 连接断了。
-pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, Said> {
+pub fn migrate(
+    core: &mut dyn Core,
+    copy: &Layout,
+    root: &Path,
+    language: Language,
+) -> Result<Item, Said> {
+    let words = crate::words::packages::logins(language);
     let cache = copy.root.join("cache");
     let mut item = Item {
         what: "logins".to_string(),
         status: Status::Migrated,
-        source: "cache/<工具>/".to_string(),
-        format: "goofish-search：session.json（Playwright storage_state）、<md5 前 12 位>.json（监控票据）；zhihu-search、xhs-search：Chromium 的 profile；bilibili：cookie".to_string(),
+        source: words.source.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some(format!("root/state/scripts/{GOOFISH}/goofish/legacy/")),
@@ -70,14 +77,11 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
                     )),
                 }
             }
-            notes.push(format!(
-                "闲鱼的登录态 {} 个文件拷进了 `root/state/scripts/{GOOFISH}/goofish/legacy/`；新包认不认旧版的格式没核实，要是还得重新登录，照新包的说明登一次。",
-                item.migrated
-            ));
+            notes.push((words.goofish_copied)(item.migrated, GOOFISH));
         } else {
             item.skipped
                 .push(skip("cache/goofish-search", &format!("install:{GOOFISH}")));
-            notes.push(format!("闲鱼的登录态 {} 个文件：`{GOOFISH}` 没装，装上以后重跑迁移，或者在新包里重新登录。", files.len()));
+            notes.push((words.goofish_missing)(files.len(), GOOFISH));
         }
     }
     let mut others = Vec::new();
@@ -93,22 +97,19 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
         } else if name == "bilibili-live-stream" {
             item.skipped
                 .push(skip(&format!("cache/{name}"), &format!("install:{LIVE}")));
-            notes.push(format!("B 站开播的登录态有新包 `{LIVE}`，旧版的格式没核实、没拷：装上新包以后在里面重新登录一次。"));
+            notes.push((words.live)(LIVE));
         }
     }
     if !others.is_empty() {
-        notes.push(format!(
-            "{} 新版还没有对应的包，登录态留在压缩包里（`cache/` 下），以后有了包再迁。",
-            others.join("、")
-        ));
+        notes.push((words.others)(&language.list(&others)));
     }
     if files.is_empty() && item.skipped.is_empty() {
         item.status = Status::Skipped;
-        notes.push("旧根里没有搜索脚本的登录态。".to_string());
+        notes.push(words.none.to_string());
     } else if !item.skipped.is_empty() {
         item.status = Status::Partial;
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     Ok(item)
 }
 

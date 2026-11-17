@@ -84,7 +84,7 @@ fn the_agent_report_reads_back_the_same() {
 
 #[test]
 fn the_human_report_lists_only_what_was_left_behind() {
-    let human = sample().human();
+    let human = sample().human(Language::Zh);
     assert!(
         human.contains("/data/var/lib/migrate/run/miyu-0.7.tar.zst"),
         "{human}"
@@ -109,10 +109,41 @@ fn the_human_report_lists_only_what_was_left_behind() {
 #[test]
 fn both_reports_land_in_the_folder() {
     let dir = tempfile::tempdir().unwrap();
-    let (human, agent) = sample().write(&dir.path().join("run")).unwrap();
+    let (human, agent) = sample()
+        .write(&dir.path().join("run"), Language::Zh)
+        .unwrap();
     assert_eq!(human.file_name().unwrap(), "报告.md");
     assert_eq!(agent.file_name().unwrap(), "给agent.json");
     assert!(std::fs::read_to_string(agent).unwrap().ends_with("}\n"));
+}
+
+/// 英文的报告（施工 MG-21）：标题、每一类的头一句、人格那一格、没迁的那一节是英文，两个文件名也是。
+#[test]
+fn the_report_reads_in_english_when_asked() {
+    let human = sample().human(Language::En);
+    assert!(
+        human.starts_with("# Old Miyu migration report\n\nMigrated at: 2026-11-04T08:00:00Z."),
+        "{human}"
+    );
+    assert!(
+        human.contains("### sessions\n\nPartly migrated: 128 item(s), 1 skipped.\n"),
+        "{human}"
+    );
+    assert!(
+        human.contains(
+            "| `default` | Miyu | `persona-1` | a persona with this name already existed |"
+        ),
+        "{human}"
+    );
+    assert!(human.contains("## Not migrated"), "{human}");
+    assert!(human.contains("`for-agent.json`"), "{human}");
+    assert!(human.contains("the migration never deletes it"), "{human}");
+    let dir = tempfile::tempdir().unwrap();
+    let (human, agent) = sample()
+        .write(&dir.path().join("run"), Language::En)
+        .unwrap();
+    assert_eq!(human.file_name().unwrap(), "report.md");
+    assert_eq!(agent.file_name().unwrap(), "for-agent.json");
 }
 
 #[test]
@@ -140,7 +171,7 @@ fn derived_things_fold_into_one_line_and_the_old_root_comes_last() {
         target: None,
         note: Some("这是新版的包装脚本，不是旧版的，别删。".to_string()),
     });
-    let human = report.human();
+    let human = report.human(Language::Zh);
     assert!(!human.contains("### derived/"), "派生的不一条条列：{human}");
     assert!(human.contains("### 派生的缓存\n\n2 处"), "{human}");
     assert!(human.contains("## 数据根外面\n\n旧版在数据根外面装过这些，不在压缩包里：\n\n- `~/.local/bin/miyu`：这是新版的包装脚本"), "{human}");

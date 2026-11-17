@@ -228,7 +228,7 @@ fn same_names_are_mapped_dev_goes_to_the_engineer_and_the_rest_are_created() {
         cat,
         old("bad-md", "坏的", Kind::Prompt),
     ];
-    let mapped = apply(&mut core, &olds).unwrap();
+    let mapped = apply(&mut core, &olds, Language::Zh).unwrap();
     let rows: Vec<(&str, Option<&str>, How)> = mapped
         .iter()
         .map(|row| (row.old.as_str(), row.new.as_deref(), row.how))
@@ -275,7 +275,7 @@ fn without_the_engineer_dev_is_left_unmapped() {
         refuse: "",
         calls: Vec::new(),
     };
-    let mapped = apply(&mut core, &[old("dev", "dev", Kind::Dev)]).unwrap();
+    let mapped = apply(&mut core, &[old("dev", "dev", Kind::Dev)], Language::Zh).unwrap();
     assert_eq!(
         (mapped[0].new.as_deref(), mapped[0].how),
         (None, How::Missing)

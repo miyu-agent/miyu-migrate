@@ -15,14 +15,12 @@ use std::sync::Arc;
 
 use crate::layout::Layout;
 use crate::report::{Item, Status};
+use crate::words::Language;
 
 pub use convert::{Converted, convert};
 
 /// 旧库要是这一版。
 pub const VERSION: i64 = 4;
-
-/// 旧格式一句话（写进给 agent 的报告）。
-const FORMAT: &str = "SQLite（user_version 4）：messages 一行一条（platform onebot、account_id 机器人号、conversation_kind group/private、conversation_id、message_id、sender_id、sender_name、text、media_json、mentions_json、reply_to_message_id、is_bot、sent_at 秒、recalled_at 秒），recalls 撤回（operator_id），context_boundaries 不迁";
 
 /// 导一份文件、交回命令的输出。
 pub type Run = dyn Fn(&Path) -> io::Result<Output> + Send + Sync;
@@ -57,7 +55,8 @@ impl Importer {
 }
 
 /// 迁 QQ 消息记录：读 `copy`（解出来的副本）的旧库，写成 `<dir>/qq-records.jsonl`，交 `importer` 导。交回报告的一项。
-pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
+pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer, language: Language) -> Item {
+    let words = crate::words::sessions::records(language);
     let path = copy.qq_history();
     let source = path
         .strip_prefix(&copy.root)
@@ -68,7 +67,7 @@ pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
         what: "qq-records".to_string(),
         status: Status::Migrated,
         source,
-        format: FORMAT.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some("miyu im records import".to_string()),
@@ -76,26 +75,26 @@ pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
     };
     if !path.is_file() {
         item.status = Status::Skipped;
-        item.note = Some("旧根里没有 QQ 消息记录。".to_string());
+        item.note = Some(words.none.to_string());
         return item;
     }
     let converted = match convert(&path) {
         Ok(Some(converted)) => converted,
         Ok(None) => {
             item.status = Status::Archived;
-            item.note = Some(format!("消息记录库不是第 {VERSION} 版，整库留在压缩包里。"));
+            item.note = Some((words.wrong_version)(VERSION));
             return item;
         }
         Err(error) => {
             item.status = Status::Archived;
-            item.note = Some(format!("消息记录库读不了：{error}"));
+            item.note = Some((words.unreadable)(&error.to_string()));
             return item;
         }
     };
     let file = dir.join("qq-records.jsonl");
     if let Err(error) = write(&file, &converted.lines) {
         item.status = Status::Archived;
-        item.note = Some(format!("写不了 {}：{error}", file.display()));
+        item.note = Some((words.cannot_write)(&file, &error.to_string()));
         return item;
     }
     let absolute = std::path::absolute(&file).unwrap_or(file);
@@ -103,14 +102,9 @@ pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
         "miyu im records import {}",
         crate::report::shell_path(&absolute)
     );
-    let mut note = format!(
-        "转出 {} 条消息、{} 件撤回（消息不在了的那几次），写在 `{}`。",
-        converted.messages,
-        converted.happenings,
-        absolute.display()
-    );
+    let mut note = (words.converted)(converted.messages, converted.happenings, &absolute);
     if converted.foreign > 0 {
-        note.push_str(&format!("{} 条不是 QQ 的没转。", converted.foreign));
+        note.push_str(&(words.foreign)(converted.foreign));
     }
     match (importer.0)(&absolute) {
         Ok(output) if output.status.success() => {
@@ -118,33 +112,27 @@ pub fn migrate(copy: &Layout, dir: &Path, importer: &Importer) -> Item {
             let counts = numbers(&said);
             let added = counts.first().copied().unwrap_or_default();
             item.migrated = added + counts.get(1).copied().unwrap_or_default();
-            note.push_str(&format!(
-                "im 新收了 {added} 条消息、{} 件群事件",
-                counts.get(1).copied().unwrap_or_default()
+            note.push_str(&(words.added)(
+                added,
+                counts.get(1).copied().unwrap_or_default(),
             ));
             if let (Some(same), Some(taken)) = (counts.get(3), counts.get(4)) {
-                note.push_str(&format!(
-                    "；{same} 条 im 里本来就有（新 im 并行接过的、以前导过的），{taken} 条编号被别的消息占了、留着 im 里的"
-                ));
+                note.push_str(&(words.same)(*same, *taken));
                 if *taken > 0 {
                     item.status = Status::Partial;
                 }
             }
-            note.push('。');
+            note.push_str(words.full_stop);
         }
         Ok(output) => {
             item.status = Status::Archived;
             let said = String::from_utf8_lossy(&output.stderr);
             let first = said.lines().next().unwrap_or_default().trim().to_string();
-            note.push_str(&format!(
-                "im 没导（{first}）。装上 im 以后（或者照它说的改好以后）跑：`{command}`。"
-            ));
+            note.push_str(&(words.refused)(&first, &command));
         }
         Err(error) => {
             item.status = Status::Archived;
-            note.push_str(&format!(
-                "跑不了 im（{error}）。装上 im 以后跑：`{command}`。"
-            ));
+            note.push_str(&(words.cannot_run)(&error.to_string(), &command));
         }
     }
     item.note = Some(note);

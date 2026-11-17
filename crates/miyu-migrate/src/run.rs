@@ -12,6 +12,7 @@ use crate::layout::{self, LayoutError};
 use crate::lock;
 use crate::personas::{self, How};
 use crate::report::{self, Archive, Item, OldRoot, Report, Skip, Status};
+use crate::words::Language;
 
 /// 迁到哪：留给人的（压缩包、清单、两份报告、没导成的 QQ 记录和表情包）放在新数据根的 `root/documents/旧版 Miyu 迁移/<时刻>/`
 /// （[`keep_dir`]：人看得见，卸了迁移包也不删，跟着数据根一起备份）；中间产物（解开核对的副本、暂存）放在
@@ -32,15 +33,18 @@ pub struct Plan {
     pub home: Option<PathBuf>,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
+    /// 给人看的字用哪种语言（报告、留给人的目录名；施工 MG-21）。
+    pub language: Language,
 }
 
-/// 留给人的那些放在新数据根的哪个目录下（一次一个子目录，名字是时刻）。
-pub const KEEP: &str = "旧版 Miyu 迁移";
-
-/// 新数据根 `root` 里放留给人的那一层：`root/documents/旧版 Miyu 迁移/`，同迁过去的文档一层（MG-10）。
+/// 新数据根 `root` 里放留给人的那一层：`root/documents/<目录>/`，同迁过去的文档一层（MG-10）；目录名照语言（中文
+/// 「旧版 Miyu 迁移」，英文 `Old Miyu migration`，MG-21），一次一个子目录，名字是时刻。
 #[must_use]
-pub fn keep_dir(root: &miyu_client::places::DataRoot) -> PathBuf {
-    root.path().join("root").join("documents").join(KEEP)
+pub fn keep_dir(root: &miyu_client::places::DataRoot, language: Language) -> PathBuf {
+    root.path()
+        .join("root")
+        .join("documents")
+        .join(crate::words::report::words(language).keep_dir)
 }
 
 /// `path` 所在那块盘还剩多少字节（给这个用户的）。
@@ -79,30 +83,29 @@ pub enum RunError {
     Io(PathBuf, io::Error),
 }
 
+impl RunError {
+    /// 照语言说一句（字在 [`crate::words::cli`]）。
+    #[must_use]
+    pub fn say(&self, language: Language) -> String {
+        let words = crate::words::cli::words(language);
+        match self {
+            RunError::Layout(error) => error.say(language),
+            RunError::StillRunning(Some(pid)) => (words.still_running_pid)(*pid),
+            RunError::StillRunning(None) => words.still_running.to_string(),
+            RunError::Exists(dir) => (words.exists)(dir),
+            RunError::NoSpace { need, have, at } => {
+                (words.no_space)(at, need.div_ceil(1 << 20), have >> 20)
+            }
+            RunError::Core(said) => (words.core_said)(&said.to_string()),
+            RunError::Archive(error) => error.say(language),
+            RunError::Io(path, error) => format!("{}: {error}", path.display()),
+        }
+    }
+}
+
 impl fmt::Display for RunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RunError::Layout(error) => write!(f, "{error}"),
-            RunError::StillRunning(Some(pid)) => {
-                write!(f, "old Miyu is still running (pid {pid}); stop it first")
-            }
-            RunError::StillRunning(None) => write!(f, "old Miyu is still running; stop it first"),
-            RunError::Exists(dir) => write!(
-                f,
-                "{} already exists; wait a second and run again",
-                dir.display()
-            ),
-            RunError::NoSpace { need, have, at } => write!(
-                f,
-                "not enough disk space for the archive and its check under {}: need {} MiB, have {} MiB",
-                at.display(),
-                need.div_ceil(1 << 20),
-                have >> 20
-            ),
-            RunError::Core(said) => write!(f, "the core said {said}"),
-            RunError::Archive(error) => write!(f, "{error}"),
-            RunError::Io(path, error) => write!(f, "{}: {error}", path.display()),
-        }
+        f.write_str(&self.say(Language::En))
     }
 }
 
@@ -128,7 +131,7 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     if let Some(holder) = lock::holder(&lock).map_err(|error| RunError::Io(lock.clone(), error))? {
         return Err(RunError::StillRunning(holder.pid));
     }
-    let keep = keep_dir(&plan.root);
+    let keep = keep_dir(&plan.root, plan.language);
     let bytes = size(&old.root).map_err(|error| RunError::Io(old.root.clone(), error))?;
     room(plan, &keep, bytes.saturating_mul(2))?;
     room(plan, &plan.state, bytes)?;
@@ -154,15 +157,17 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
     let copy = layout::read(&work).map_err(RunError::Layout)?;
     let found =
         personas::read(&copy, &old.root).map_err(|error| RunError::Io(work.clone(), error))?;
-    let mapped = personas::apply(core, &found.olds).map_err(RunError::Core)?;
+    let mapped = personas::apply(core, &found.olds, plan.language).map_err(RunError::Core)?;
     let sessions = crate::sessions::migrate(
         core,
         &plan.root,
         (&copy, &old.root),
         &mapped,
         &scratch.join("stage"),
+        plan.language,
     )
     .map_err(RunError::Core)?;
+    let words = crate::words::personas::words(plan.language);
     let (files, bytes) = manifest.totals();
     let (_, sha256) =
         archive::hash_file(&packed).map_err(|error| RunError::Io(packed.clone(), error))?;
@@ -191,54 +196,62 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         what: "archive".to_string(),
         status: Status::Migrated,
         source: ".".to_string(),
-        format: "旧数据根整个打成 tar.zst，逐文件 SHA-256 记在清单里".to_string(),
+        format: words.archive_format.to_string(),
         migrated: files,
         skipped: Vec::new(),
         target: Some(absolute(&packed)),
-        note: (!manifest.skipped.is_empty()).then(|| {
-            format!(
-                "{} 样不是普通文件、目录、链接，没打进去。",
-                manifest.skipped.len()
-            )
-        }),
+        note: (!manifest.skipped.is_empty())
+            .then(|| (words.archive_unpacked)(manifest.skipped.len())),
     });
-    report.items.extend(persona_items(&mapped, &found.extras));
-    report.items.push(sessions);
     report
         .items
-        .push(crate::records::migrate(&copy, &dir, &plan.records));
-    let (memories, pending) = crate::memories::migrate(core, &copy, &mapped, std::thread::sleep)
-        .map_err(RunError::Core)?;
+        .extend(persona_items(&mapped, &found.extras, words));
+    report.items.push(sessions);
+    report.items.push(crate::records::migrate(
+        &copy,
+        &dir,
+        &plan.records,
+        plan.language,
+    ));
+    let (memories, pending) =
+        crate::memories::migrate(core, &copy, &mapped, std::thread::sleep, plan.language)
+            .map_err(RunError::Core)?;
     report.items.push(memories);
     report.pending.extend(pending);
     report
         .items
-        .push(crate::settings::migrate(core, &copy).map_err(RunError::Core)?);
+        .push(crate::settings::migrate(core, &copy, plan.language).map_err(RunError::Core)?);
     report
         .items
-        .push(crate::memes::migrate(core, &copy, &dir).map_err(RunError::Core)?);
-    let moved = crate::skills::migrate(&copy, plan.root.path());
+        .push(crate::memes::migrate(core, &copy, &dir, plan.language).map_err(RunError::Core)?);
+    let moved = crate::skills::migrate(&copy, plan.root.path(), plan.language);
     report
         .items
         .extend([moved.skills, moved.scripts, moved.packages]);
+    report.items.push(
+        crate::knowledge::migrate(core, &copy, plan.root.path(), plan.language)
+            .map_err(RunError::Core)?,
+    );
+    report.items.push(crate::files::migrate(
+        &copy,
+        plan.root.path(),
+        plan.language,
+    ));
+    report.items.push(
+        crate::logins::migrate(core, &copy, plan.root.path(), plan.language)
+            .map_err(RunError::Core)?,
+    );
     report
         .items
-        .push(crate::knowledge::migrate(core, &copy, plan.root.path()).map_err(RunError::Core)?);
-    report
-        .items
-        .push(crate::files::migrate(&copy, plan.root.path()));
-    report
-        .items
-        .push(crate::logins::migrate(core, &copy, plan.root.path()).map_err(RunError::Core)?);
-    report
-        .items
-        .push(crate::sponsors::migrate(core, &copy).map_err(RunError::Core)?);
-    report
-        .items
-        .extend(crate::leftovers::items(&copy, plan.home.as_deref()));
+        .push(crate::sponsors::migrate(core, &copy, plan.language).map_err(RunError::Core)?);
+    report.items.extend(crate::leftovers::items(
+        &copy,
+        plan.home.as_deref(),
+        plan.language,
+    ));
     report.personas = mapped;
     let (human, agent) = report
-        .write(&dir)
+        .write(&dir, plan.language)
         .map_err(|error| RunError::Io(dir.clone(), error))?;
     // 中间产物（解出来的副本、暂存）用完就删：留给人的在数据根里。
     fs::remove_dir_all(&scratch).map_err(|error| RunError::Io(scratch.clone(), error))?;
@@ -246,7 +259,11 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
 }
 
 /// 人格这一类、只报不迁的几样（细则第六节）。
-fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec<Item> {
+fn persona_items(
+    mapped: &[personas::Mapped],
+    extras: &[personas::Extra],
+    words: &crate::words::personas::Personas,
+) -> Vec<Item> {
     let skipped: Vec<Skip> = mapped
         .iter()
         .filter(|row| row.how == How::Missing)
@@ -263,7 +280,7 @@ fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec
             Status::Partial
         },
         source: "data/prompts".to_string(),
-        format: "<名字>.md 是人设；hints/<scope>.md 角色扮演提示、dialogs/<scope>.md 示范对话（行首 user:/assistant:），空文件是停用；<名字>.json 的 avatar_path 是头像".to_string(),
+        format: words.format.to_string(),
         migrated: mapped.iter().filter(|row| row.new.is_some()).count() as u64,
         skipped,
         target: Some("persona.set".to_string()),
@@ -280,22 +297,10 @@ fn persona_items(mapped: &[personas::Mapped], extras: &[personas::Extra]) -> Vec
     }
     for (why, sources) in kinds {
         let (what, format) = match why {
-            "persona-settings" => (
-                "persona-settings",
-                "TOML：[subsystems] memory/persona_reminder/voice/emotion，[plugins] enabled/scripts/skills/mcp 白名单；新版没有对应",
-            ),
-            "dev-prompt" => (
-                "dev-prompt",
-                "开发模式的提示词（Markdown）；新版的软件工程师是出厂的，不改",
-            ),
-            "system-prompt" => (
-                "system-prompt",
-                "旧版没选人格时的自定义系统提示词（Markdown）；新版没有对应",
-            ),
-            _ => (
-                "persona-avatar",
-                "网页附带的 avatar_path 指的头像在旧根以外或者不在了",
-            ),
+            "persona-settings" => ("persona-settings", words.settings),
+            "dev-prompt" => ("dev-prompt", words.dev_prompt),
+            "system-prompt" => ("system-prompt", words.system_prompt),
+            _ => ("persona-avatar", words.avatar),
         };
         items.push(Item {
             what: what.to_string(),

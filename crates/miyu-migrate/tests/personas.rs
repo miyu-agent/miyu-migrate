@@ -44,6 +44,7 @@ fn plan(root: &DataRoot, old: &Path, state: PathBuf, at: &str) -> Plan {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     }
 }
 

@@ -99,6 +99,7 @@ fn rehearse() {
         records: im(&fresh.root),
         home: std::env::var_os("MIYU_MIGRATE_HOME").map(PathBuf::from),
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     let first = run::run(&plan("2026-11-04T08:00:00Z"), &mut core).unwrap();
     // 做好的表情包：核心认不认得（不装）。

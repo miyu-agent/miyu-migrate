@@ -20,18 +20,18 @@ use sha2::{Digest, Sha256};
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
 use crate::sessions::{Db, ids};
+use crate::words::Language;
 
 /// 迁文件：`copy` 里的拷进新数据根 `root`。交回报告的一项。
-pub fn migrate(copy: &Layout, root: &Path) -> Item {
+pub fn migrate(copy: &Layout, root: &Path, language: Language) -> Item {
+    let words = crate::words::files::files(language);
     let new = root.join("root");
     let titles = titles(copy);
     let mut item = Item {
         what: "files".to_string(),
         status: Status::Migrated,
-        source: "home/<管>/{pictures,documents,artifacts,workspace}、data/pictures、workspace"
-            .to_string(),
-        format: "普通文件：图片、文档、工具产出的产物（artifacts/<旧会话编号>/）、工作目录"
-            .to_string(),
+        source: words.source.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some("root/{pictures,documents,workspace}".to_string()),
@@ -78,33 +78,24 @@ pub fn migrate(copy: &Layout, root: &Path) -> Item {
             .push(skip(&relative(&shares, &copy.root), "shares"));
     }
     item.migrated = tally.copied + tally.present;
-    let mut notes = vec![format!(
-        "拷了 {} 个文件，{} 个以前迁过。",
-        tally.copied, tally.present
-    )];
+    let mut notes = vec![(words.copied)(tally.copied, tally.present)];
     if !tally.renamed.is_empty() {
-        notes.push(format!(
-            "新版里已经有同名不一样的，改了名：{}。",
-            tally.renamed.join("、")
-        ));
+        notes.push((words.renamed)(&language.list(&tally.renamed)));
     }
     if tally.mismatch > 0 {
-        notes.push(format!(
-            "{} 个拷完核对 SHA-256 对不上，照实写在这里。",
-            tally.mismatch
-        ));
+        notes.push((words.mismatch)(tally.mismatch));
     }
     if shares.is_dir() {
-        notes.push("`shares/`（以前给别人的分享）新版没有对应的，留在压缩包里。".to_string());
+        notes.push(words.shares.to_string());
     }
     if !item.skipped.is_empty() || tally.mismatch > 0 {
         item.status = Status::Partial;
     }
     if tally.copied + tally.present == 0 && item.skipped.is_empty() {
         item.status = Status::Skipped;
-        notes = vec!["旧根里没有这几样文件。".to_string()];
+        notes = vec![words.none.to_string()];
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     item
 }
 

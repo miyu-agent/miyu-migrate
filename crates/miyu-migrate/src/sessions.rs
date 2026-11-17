@@ -27,6 +27,8 @@ use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::personas::Mapped;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
+use crate::words::sessions::Sessions;
 
 pub use events::{Attached, Built, Head, Media, build};
 pub use extras::{Extras, Raw};
@@ -35,9 +37,6 @@ pub use old::{Attachment, Binding, Db, NEWEST, Session, Turn};
 pub use said::Who;
 pub use snapshot::{Snapshot, borrow};
 pub use stage::{Stage, StageError};
-
-/// 旧格式一句话（写进给 agent 的报告）。
-const FORMAT: &str = "SQLite（user_version 1-40）：sessions 一行一个会话（kind user/ask/voice/subagent，owner 非空是成员的），turns 一行一轮（user_content/display_content、assistant_content/assistant_reasoning、tool_flow JSON、replay_journal JSON、is_summary 摘要行），user_attachments 附件（data 列或 state/attachments/<编号>/<文件名>），platform_session_bindings 绑场所";
 
 /// 迁了多少。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -80,7 +79,9 @@ pub fn migrate(
     (copy, original): (&Layout, &Path),
     mapped: &[Mapped],
     stage: &Path,
+    language: Language,
 ) -> Result<Item, Said> {
+    let words = crate::words::sessions::sessions(language);
     let path = copy.conversation_db();
     let source = path
         .strip_prefix(&copy.root)
@@ -91,7 +92,7 @@ pub fn migrate(
         what: "sessions".to_string(),
         status: Status::Migrated,
         source: source.clone(),
-        format: FORMAT.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some("session.import (archive)".to_string()),
@@ -99,26 +100,20 @@ pub fn migrate(
     };
     if !path.is_file() {
         item.status = Status::Skipped;
-        item.note = Some("旧根里没有会话库。".to_string());
+        item.note = Some(words.none.to_string());
         return Ok(item);
     }
     let db = match Db::open(&path).and_then(|db| Ok((db.sessions()?, db.bindings()?, db))) {
         Ok((sessions, bindings, db)) if db.version <= NEWEST => (sessions, bindings, db),
         Ok((_, _, db)) => {
-            return Ok(archived(
-                item,
-                format!(
-                    "会话库的版本 {} 比认得的 {NEWEST} 新，整库留在压缩包里。",
-                    db.version
-                ),
-            ));
+            return Ok(archived(item, (words.too_new)(db.version, NEWEST)));
         }
-        Err(error) => return Ok(archived(item, format!("会话库读不了：{error}"))),
+        Err(error) => return Ok(archived(item, (words.unreadable)(&error.to_string()))),
     };
     let (sessions, bindings, db) = db;
     let stage = match Stage::new(stage) {
         Ok(stage) => stage,
-        Err(error) => return Ok(archived(item, format!("暂存目录建不了：{error}"))),
+        Err(error) => return Ok(archived(item, (words.no_stage)(&error.to_string()))),
     };
     let (jobs, unreadable) = plan(
         (copy, original),
@@ -174,15 +169,14 @@ pub fn migrate(
     if !item.skipped.is_empty() || !unreadable.is_empty() {
         item.status = Status::Partial;
     }
-    let mut text = note(&counted, unmapped);
+    let mut text = note(&counted, unmapped, words);
     if !unreadable.is_empty() {
-        text.push_str(&format!(
-            "被挤出上下文的库有 {} 个读不了（{}），留在压缩包里。",
+        text.push((words.evicted_unreadable)(
             unreadable.len(),
-            unreadable.join("、")
+            &language.list(&unreadable),
         ));
     }
-    item.note = Some(text);
+    item.note = Some(language.sentences(&text));
     Ok(item)
 }
 
@@ -396,58 +390,27 @@ fn archived(mut item: Item, note: String) -> Item {
     item
 }
 
-/// 给人看的一句：几轮、跳过的摘要行、附件；人格映射不上的；只有展示转录的轮。
-fn note(counted: &Counted, unmapped: u64) -> String {
-    let mut note = format!(
-        "{} 轮，{} 个附件；摘要行 {} 条不导（是派生的）。",
-        counted.turns, counted.attachments, counted.summaries
-    );
-    if counted.children > 0 {
-        note.push_str(&format!(
-            "子代理会话 {} 个作子会话，和主会话一起导。",
-            counted.children
-        ));
-    }
-    if counted.present > 0 {
-        note.push_str(&format!("其中 {} 个会话以前就导过。", counted.present));
-    }
-    if unmapped > 0 {
-        note.push_str(&format!(
-            "{unmapped} 个会话的人格没映射上，导成了无人格的存档。"
-        ));
-    }
-    if counted.replay_only > 0 {
-        note.push_str(&format!(
-            "{} 轮只有展示转录：工具照转录拼的，参数和输出被旧版截过。",
-            counted.replay_only
-        ));
-    }
-    if counted.evicted > 0 {
-        note.push_str(&format!(
-            "被挤出上下文的 {} 轮拼回了原来的会话。",
-            counted.evicted
-        ));
-    }
-    if counted.unknown > 0 {
-        note.push_str(&format!(
-            "群里 {} 条话拆不出是谁说的，记成 qq:unknown。",
-            counted.unknown
-        ));
-    }
-    if counted.tool_blocks > 0 {
-        note.push_str(&format!(
-            "工具结果后面接了 {} 张图、文件。",
-            counted.tool_blocks
-        ));
-    }
-    if counted.unplaced > 0 {
-        note.push_str(&format!(
-            "工具出的图、文件有 {} 样对不上调用（那一轮的工具细节没有了，例如被挤出的轮），没接上，留在压缩包里。",
-            counted.unplaced
-        ));
-    }
-    if counted.questions > 0 {
-        note.push_str(&format!("提问 {} 次写成了 ask_user。", counted.questions));
+/// 给人看的几句：几轮、跳过的摘要行、附件；人格映射不上的；只有展示转录的轮。
+fn note(counted: &Counted, unmapped: u64, words: &Sessions) -> Vec<String> {
+    let mut note = vec![(words.turns)(
+        counted.turns,
+        counted.attachments,
+        counted.summaries,
+    )];
+    for (n, say) in [
+        (counted.children, words.children),
+        (counted.present, words.present),
+        (unmapped, words.unmapped),
+        (counted.replay_only, words.replay_only),
+        (counted.evicted, words.evicted),
+        (counted.unknown, words.unknown),
+        (counted.tool_blocks, words.tool_blocks),
+        (counted.unplaced, words.unplaced),
+        (counted.questions, words.questions),
+    ] {
+        if n > 0 {
+            note.push(say(n));
+        }
     }
     note
 }

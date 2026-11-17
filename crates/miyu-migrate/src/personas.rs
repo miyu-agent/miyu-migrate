@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::core::{Core, Said};
+use crate::words::Language;
+use crate::words::personas::Personas;
 
 pub use dialogs::parse as parse_dialogs;
 pub use read::{Extra, Found, read, scope_name};
@@ -93,7 +95,9 @@ pub enum How {
 /// # Errors
 ///
 /// 列不出新版的人格（`persona.list` 被拒、连接断了）：[`Said`]。
-pub fn apply(core: &mut dyn Core, olds: &[Old]) -> Result<Vec<Mapped>, Said> {
+/// `note` 照 `language` 写（[`crate::words::personas`]）。
+pub fn apply(core: &mut dyn Core, olds: &[Old], language: Language) -> Result<Vec<Mapped>, Said> {
+    let words = crate::words::personas::words(language);
     let listed = core.call("persona.list", json!({}))?;
     let existing: Vec<(String, Option<String>)> = listed["personas"]
         .as_array()
@@ -108,13 +112,18 @@ pub fn apply(core: &mut dyn Core, olds: &[Old]) -> Result<Vec<Mapped>, Said> {
         .unwrap_or_default();
     let mut mapped = Vec::with_capacity(olds.len());
     for old in olds {
-        mapped.push(one(core, old, &existing));
+        mapped.push(one(core, old, &existing, words));
     }
     Ok(mapped)
 }
 
 /// 一个旧人格：映射到已有的，或者新建。
-fn one(core: &mut dyn Core, old: &Old, existing: &[(String, Option<String>)]) -> Mapped {
+fn one(
+    core: &mut dyn Core,
+    old: &Old,
+    existing: &[(String, Option<String>)],
+    words: &Personas,
+) -> Mapped {
     let row = |new: Option<String>, how: How, note: Option<String>| Mapped {
         old: old.scope.clone(),
         name: old.name.clone(),
@@ -126,11 +135,7 @@ fn one(core: &mut dyn Core, old: &Old, existing: &[(String, Option<String>)]) ->
         return if existing.iter().any(|(id, _)| id == ENGINEER) {
             row(Some(ENGINEER.to_string()), How::Engineer, None)
         } else {
-            row(
-                None,
-                How::Missing,
-                Some(format!("新版没有 {ENGINEER}（出厂的包被卸了）")),
-            )
+            row(None, How::Missing, Some((words.no_engineer)(ENGINEER)))
         };
     }
     if let Some((id, _)) = existing
@@ -144,17 +149,13 @@ fn one(core: &mut dyn Core, old: &Old, existing: &[(String, Option<String>)]) ->
         Err(said) => return row(None, How::Missing, Some(said.to_string())),
     };
     let Some(id) = created["persona"].as_str().map(str::to_string) else {
-        return row(
-            None,
-            How::Missing,
-            Some("persona.set 没交回编号".to_string()),
-        );
+        return row(None, How::Missing, Some(words.no_id.to_string()));
     };
     let note = old
         .avatar
         .as_ref()
         .and_then(|avatar| set_avatar(core, &id, avatar).err())
-        .map(|said| format!("头像没传上：{said}"));
+        .map(|said| (words.avatar_failed)(&said.to_string()));
     row(Some(id), How::Created, note)
 }
 

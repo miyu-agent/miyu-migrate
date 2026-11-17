@@ -58,7 +58,7 @@ fn goofish_goes_to_its_package_and_the_rest_is_reported() {
         installed: true,
         calls: 0,
     };
-    let item = migrate(&mut core, &layout, new.path()).unwrap();
+    let item = migrate(&mut core, &layout, new.path(), Language::Zh).unwrap();
     let target = new
         .path()
         .join("root/state/scripts")
@@ -101,7 +101,7 @@ fn without_the_goofish_package_nothing_is_copied() {
         installed: false,
         calls: 0,
     };
-    let item = migrate(&mut core, &layout, new.path()).unwrap();
+    let item = migrate(&mut core, &layout, new.path(), Language::Zh).unwrap();
     assert!(!new.path().join("root").exists());
     assert_eq!(item.migrated, 0);
     assert!(
@@ -121,7 +121,7 @@ fn no_logins_no_questions() {
         installed: true,
         calls: 0,
     };
-    let item = migrate(&mut core, &layout, dir.path()).unwrap();
+    let item = migrate(&mut core, &layout, dir.path(), Language::Zh).unwrap();
     assert_eq!(item.status, Status::Skipped);
     assert_eq!(core.calls, 0);
 }
@@ -139,7 +139,7 @@ fn copied_logins_are_private() {
         installed: true,
         calls: 0,
     };
-    migrate(&mut core, &layout, new.path()).unwrap();
+    migrate(&mut core, &layout, new.path(), Language::Zh).unwrap();
     let target = new
         .path()
         .join("root/state/scripts")

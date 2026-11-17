@@ -264,7 +264,8 @@ fn big_personas_go_in_batches_and_a_busy_dream_is_waited_for() {
         calls: Vec::new(),
     };
     SLEPT.store(0, Ordering::SeqCst);
-    let (item, pending) = migrate(&mut core, &layout, &mapped(), count_sleep).unwrap();
+    let (item, pending) =
+        migrate(&mut core, &layout, &mapped(), count_sleep, Language::Zh).unwrap();
     let imports: Vec<usize> = core
         .calls
         .iter()
@@ -296,7 +297,7 @@ fn a_refused_batch_stops_that_persona_and_says_why() {
         config: json!({}),
         calls: Vec::new(),
     };
-    let (item, _) = migrate(&mut core, &layout, &mapped(), count_sleep).unwrap();
+    let (item, _) = migrate(&mut core, &layout, &mapped(), count_sleep, Language::Zh).unwrap();
     assert_eq!(item.migrated, 0);
     assert_eq!(item.status, Status::Partial);
     assert_eq!(

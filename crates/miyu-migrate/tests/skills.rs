@@ -38,6 +38,7 @@ fn copied_skills_are_seen_by_the_core() {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     run::run(&plan, &mut core).unwrap();
     let listed = core.call("skill.list", json!({})).unwrap();

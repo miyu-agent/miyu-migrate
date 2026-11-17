@@ -64,7 +64,55 @@ fn plan(old: &Path, state: &Path) -> Plan {
         records: crate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: plenty,
+        language: Language::Zh,
     }
+}
+
+/// 英文跑一次（施工 MG-21）：留给人的目录、两份报告的文件名是英文，给人看的报告里没有一个汉字（旧根、临时目录里都没有中文）。
+#[test]
+fn an_english_run_writes_english_reports() {
+    let old = old_root();
+    let state = tempfile::tempdir().unwrap();
+    let mut plan = plan(old.path(), state.path());
+    plan.language = Language::En;
+    let done = run(&plan, &mut Fake).unwrap();
+    let dir = state
+        .path()
+        .join("new-root/root/documents/Old Miyu migration/20261104T080000Z");
+    assert_eq!(done.human, dir.join("report.md"));
+    assert_eq!(done.agent, dir.join("for-agent.json"));
+    let human = fs::read_to_string(&done.human).unwrap();
+    assert!(human.contains("### archive\n\nMigrated: "), "{human}");
+    let han: String = human
+        .chars()
+        .filter(|one| {
+            ('\u{4e00}'..='\u{9fff}').contains(one)
+                || ('\u{3000}'..='\u{303f}').contains(one)
+                || ('\u{ff00}'..='\u{ffef}').contains(one)
+        })
+        .collect();
+    assert!(han.is_empty(), "英文报告里有中文「{han}」：\n{human}");
+}
+
+/// 终端上的报错照语言说（施工 MG-21）。
+#[test]
+fn errors_are_said_in_either_language() {
+    let running = RunError::StillRunning(Some(7));
+    assert_eq!(
+        running.say(Language::En),
+        "old Miyu is still running (pid 7); stop it first"
+    );
+    assert_eq!(running.to_string(), running.say(Language::En));
+    assert_eq!(
+        running.say(Language::Zh),
+        "旧版 Miyu 还在运行（进程号 7），请先停止它"
+    );
+    let not_old = RunError::Layout(crate::layout::LayoutError::NotOld(PathBuf::from("/x")));
+    assert_eq!(
+        not_old.say(Language::En),
+        "/x is not an old Miyu data folder"
+    );
+    assert_eq!(not_old.say(Language::Zh), "/x 不是旧版 Miyu 的数据目录");
 }
 
 #[test]
@@ -141,6 +189,7 @@ fn too_little_room_stops_before_packing() {
     let tight_plan = Plan {
         home: None,
         space: tight,
+        language: Language::Zh,
         ..plan(old.path(), state.path())
     };
     match run(&tight_plan, &mut Fake) {
@@ -169,6 +218,7 @@ fn the_state_disk_needs_room_for_the_unpacked_copy_too() {
     let split = Plan {
         root: miyu_client::places::DataRoot::at(disk.path().to_path_buf()),
         space: state_tight,
+        language: Language::Zh,
         ..plan(old.path(), &state.path().join("var/lib/migrate"))
     };
     match run(&split, &mut Fake) {
@@ -196,6 +246,7 @@ fn exactly_enough_room_is_enough() {
     let state = tempfile::tempdir().unwrap();
     let just = Plan {
         space: exact,
+        language: Language::Zh,
         ..plan(old.path(), state.path())
     };
     run(&just, &mut Fake).unwrap();

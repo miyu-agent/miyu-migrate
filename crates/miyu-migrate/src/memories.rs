@@ -18,6 +18,8 @@ use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::personas::Mapped;
 use crate::report::{Item, Pending, Skip, Status};
+use crate::words::Language;
+use crate::words::memories::Memories;
 
 pub use read::{Fact, Judged, Raw, judge, read};
 
@@ -27,9 +29,6 @@ const BATCH: usize = 500;
 const BUSY_WAIT: Duration = Duration::from_secs(10);
 /// 最多问几次（五分钟）。
 const BUSY_TRIES: u32 = 30;
-
-/// 旧格式一句话。
-const FORMAT: &str = "SQLite（没有 user_version）：facts 一行一条（content、memory_type fact/preference/relationship/task/self/other、status、updated_at、tags JSON 列表、subjects JSON [{name, principal}]、owner_principal），episodes 日记（owner_principal、origin_platform、origin_sender_id 换得出 QQ 号）、memory_revisions、memory_embeddings 只在压缩包里";
 
 /// 迁记忆：读 `copy` 的每个旧人格的库，人格照 `mapped`，导进 `core`。`pause` 是等整理时睡的（测试换成不睡的）。交回报告的一项、
 /// 留给以后接着迁的（超长的）。
@@ -42,7 +41,9 @@ pub fn migrate(
     copy: &Layout,
     mapped: &[Mapped],
     pause: fn(Duration),
+    language: Language,
 ) -> Result<(Item, Vec<Pending>), Said> {
+    let words = crate::words::memories::words(language);
     let dir = copy.personas();
     let source = dir
         .strip_prefix(&copy.root)
@@ -52,8 +53,8 @@ pub fn migrate(
     let mut item = Item {
         what: "memories".to_string(),
         status: Status::Migrated,
-        source: format!("{source}/<人格>/memory/memory.db"),
-        format: FORMAT.to_string(),
+        source: (words.source)(&source),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some("memory.import".to_string()),
@@ -83,7 +84,7 @@ pub fn migrate(
         let facts = match read(&db, scope, &owners) {
             Ok(facts) => facts,
             Err(error) => {
-                notes.push(format!("`{scope}` 的库读不了（{error}），留在压缩包里。"));
+                notes.push((words.unreadable)(scope, &error.to_string()));
                 item.status = Status::Partial;
                 continue;
             }
@@ -96,15 +97,12 @@ pub fn migrate(
             .find(|row| row.old == *scope)
             .and_then(|row| row.new.clone())
         else {
-            notes.push(format!(
-                "`{scope}` 没映射上新人格，{} 条没导。",
-                facts.len()
-            ));
+            notes.push((words.unmapped)(scope, facts.len()));
             item.skipped
                 .extend(facts.iter().map(|fact| skip(&fact.origin, "unmapped")));
             continue;
         };
-        let outcome = one(core, &persona, &facts, pause)?;
+        let outcome = one(core, &persona, &facts, (pause, words))?;
         for fact in &facts {
             if let Judged::Skip(why, kind) = &fact.judged {
                 item.skipped.push(skip(&fact.origin, why));
@@ -122,22 +120,22 @@ pub fn migrate(
         item.migrated += outcome.imported;
         item.skipped
             .extend(outcome.refused.iter().map(|origin| skip(origin, "refused")));
-        notes.push(outcome.note(scope, &persona, &facts));
+        notes.push(outcome.note(scope, &persona, &facts, words));
         if outcome.stopped {
             item.status = Status::Partial;
         }
     }
     if scopes.is_empty() {
         item.status = Status::Skipped;
-        notes.push("旧根里没有记忆库。".to_string());
+        notes.push(words.none.to_string());
     }
     if owners.is_empty() && !scopes.is_empty() {
-        notes.push("没找到主人的号（新版 `[external.bindings]`、旧版 `platforms.qq.admin_users` 都没有）：说的是谁的一律当别人。".to_string());
+        notes.push(words.no_owner.to_string());
     }
     if item.status == Status::Migrated && item.skipped.iter().any(|skip| skip.why != "duplicate") {
         item.status = Status::Partial;
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     Ok((item, pending))
 }
 
@@ -156,7 +154,7 @@ struct Outcome {
 
 impl Outcome {
     /// 给人看的一句（只有条数）。
-    fn note(&self, scope: &str, persona: &str, facts: &[Fact]) -> String {
+    fn note(&self, scope: &str, persona: &str, facts: &[Fact], words: &Memories) -> String {
         let mut guessed: std::collections::BTreeMap<String, u64> =
             std::collections::BTreeMap::new();
         let mut by_name = 0;
@@ -172,20 +170,17 @@ impl Outcome {
                 Judged::Import { .. } => {}
             }
         }
-        let mut note = format!(
-            "`{scope}` → `{persona}`：导进 {} 条，以前导过 {} 条",
-            self.imported, self.duplicate
-        );
+        let mut note = (words.imported)(scope, persona, self.imported, self.duplicate);
         if !skipped.is_empty() {
-            note.push_str(&format!("，没导 {skipped:?}"));
+            note.push_str(&(words.not_imported)(&format!("{skipped:?}")));
         }
         if !guessed.is_empty() {
-            note.push_str(&format!("；没写是谁、照推荐导的（建议→导成）{guessed:?}"));
+            note.push_str(&(words.guessed)(&format!("{guessed:?}")));
         }
         if by_name > 0 {
-            note.push_str(&format!("；{by_name} 条号换不出、记成名字"));
+            note.push_str(&(words.by_name)(by_name));
         }
-        note.push_str(&format!("；{}。", self.dream));
+        note.push_str(&(words.dream)(&self.dream));
         note
     }
 }
@@ -195,7 +190,7 @@ fn one(
     core: &mut dyn Core,
     persona: &str,
     facts: &[Fact],
-    pause: fn(Duration),
+    (pause, words): (fn(Duration), &Memories),
 ) -> Result<Outcome, Said> {
     let items: Vec<(&str, &Value)> = facts
         .iter()
@@ -218,38 +213,39 @@ fn one(
                     .refused
                     .extend(batch.iter().map(|(origin, _)| (*origin).to_string()));
                 outcome.stopped = true;
-                outcome.dream = format!("核心拒了（{}），没整理", said.code);
+                outcome.dream = (words.refused)(&said.code);
                 return Ok(outcome);
             }
         }
     }
-    outcome.dream = dream(core, persona, pause)?;
+    outcome.dream = dream(core, persona, pause, words)?;
     Ok(outcome)
 }
 
 /// 整理一次：忙着的隔十秒再问，最多五分钟；等不到的不算失败。交回给人看的回执。
-fn dream(core: &mut dyn Core, persona: &str, pause: fn(Duration)) -> Result<String, Said> {
+fn dream(
+    core: &mut dyn Core,
+    persona: &str,
+    pause: fn(Duration),
+    words: &Memories,
+) -> Result<String, Said> {
     for _ in 0..BUSY_TRIES {
         match core.call("memory.dream", json!({"persona": persona})) {
             Ok(answer) => {
-                return Ok(format!(
-                    "整理了：交进 {}、作废 {}、改了 {}",
+                return Ok((words.dreamed)(
                     answer["given"].as_u64().unwrap_or_default(),
                     answer["retired"].as_u64().unwrap_or_default(),
-                    answer["revised"].as_u64().unwrap_or_default()
+                    answer["revised"].as_u64().unwrap_or_default(),
                 ));
             }
             Err(said) if said.code == "memory_busy" => pause(BUSY_WAIT),
             Err(said) if fatal(&said) => return Err(said),
             Err(said) => {
-                return Ok(format!(
-                    "整理没成（{}），以后照整理的间隔会再整理",
-                    said.code
-                ));
+                return Ok((words.dream_failed)(&said.code));
             }
         }
     }
-    Ok("整理还在跑（等了五分钟），以后照整理的间隔会再整理".to_string())
+    Ok(words.dream_busy.to_string())
 }
 
 /// 连接断了、没回：整个迁移停下。

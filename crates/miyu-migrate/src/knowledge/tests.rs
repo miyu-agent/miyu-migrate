@@ -91,7 +91,7 @@ fn own_documents_land_in_the_legacy_base() {
         exists: false,
         calls: Vec::new(),
     };
-    let item = migrate(&mut core, &layout, new.path()).unwrap();
+    let item = migrate(&mut core, &layout, new.path(), Language::Zh).unwrap();
     let base = new.path().join("root/kb/legacy");
     assert_eq!(
         fs::read(base.join("notes/日语.md")).unwrap(),
@@ -123,7 +123,7 @@ fn own_documents_land_in_the_legacy_base() {
         exists: true,
         calls: Vec::new(),
     };
-    let item = migrate(&mut again, &layout, new.path()).unwrap();
+    let item = migrate(&mut again, &layout, new.path(), Language::Zh).unwrap();
     assert_eq!(item.migrated, 3, "已经有一样的算迁过");
     let note = item.note.unwrap();
     assert!(
@@ -144,7 +144,7 @@ fn without_a_knowledge_base_the_core_is_not_asked() {
         exists: false,
         calls: Vec::new(),
     };
-    let item = migrate(&mut core, &layout, dir.path()).unwrap();
+    let item = migrate(&mut core, &layout, dir.path(), Language::Zh).unwrap();
     assert_eq!(item.status, Status::Skipped);
     assert!(core.calls.is_empty());
 }
@@ -167,7 +167,7 @@ fn only_the_builtin_wiki_makes_no_base() {
         exists: false,
         calls: Vec::new(),
     };
-    let item = migrate(&mut core, &layout, dir.path()).unwrap();
+    let item = migrate(&mut core, &layout, dir.path(), Language::Zh).unwrap();
     assert_eq!(item.status, Status::Skipped);
     assert!(item.note.unwrap().contains("只有内置的默认库（1 篇"));
     assert!(core.calls.is_empty(), "不建空库");
