@@ -68,18 +68,26 @@ pub enum ArchiveError {
     Mismatch(Vec<(String, String)>),
 }
 
-impl fmt::Display for ArchiveError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ArchiveError {
+    /// 照语言说一句（字在 [`crate::words::cli`]）。
+    #[must_use]
+    pub fn say(&self, language: crate::words::Language) -> String {
         match self {
-            ArchiveError::Io(path, error) => write!(f, "{}: {error}", path.display()),
+            ArchiveError::Io(path, error) => format!("{}: {error}", path.display()),
             ArchiveError::Mismatch(bad) => {
-                write!(f, "{} file(s) differ after unpacking", bad.len())?;
+                let mut said = (crate::words::cli::words(language).mismatch)(bad.len());
                 for (path, why) in bad.iter().take(10) {
-                    write!(f, "\n  {path}: {why}")?;
+                    said.push_str(&format!("\n  {path}: {why}"));
                 }
-                Ok(())
+                said
             }
         }
+    }
+}
+
+impl fmt::Display for ArchiveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.say(crate::words::Language::En))
     }
 }
 

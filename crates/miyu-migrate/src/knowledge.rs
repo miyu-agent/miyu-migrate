@@ -17,21 +17,25 @@ use sha2::{Digest, Sha256};
 use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
 
 /// 新版的库编号。
 pub const BASE: &str = "legacy";
 /// 新版认的文档。
 const KINDS: &[&str] = &["md", "markdown", "txt", "pdf", "html", "htm"];
 
-/// 旧格式一句话。
-const FORMAT: &str = "data/kb/files/ 下放原文；kb_meta.db 的 files（name 相对 files/、path 旧绝对路径、size_bytes、mtime、content_sha256）是清单；semantic_index.db 切块和向量（新版自己重建）；default-kb/ 开头的是旧版内置的默认库";
-
 /// 迁知识库：`copy` 的文档拷进新数据根 `root`（`<它>/root/kb/legacy/`），经 `core` 建库、读回。交回报告的一项。
 ///
 /// # Errors
 ///
 /// 连接断了。
-pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, Said> {
+pub fn migrate(
+    core: &mut dyn Core,
+    copy: &Layout,
+    root: &Path,
+    language: Language,
+) -> Result<Item, Said> {
+    let words = crate::words::files::knowledge(language);
     let dir = copy.knowledge();
     let mut item = Item {
         what: "knowledge".to_string(),
@@ -41,17 +45,17 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
             .unwrap_or(&dir)
             .to_string_lossy()
             .replace('\\', "/"),
-        format: FORMAT.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
-        target: Some(format!("root/kb/{BASE}/（kb.create）")),
+        target: Some((words.target)(BASE)),
         note: None,
     };
     let files = match listed(&dir.join("kb_meta.db")) {
         Ok(files) => files,
         Err(_) => {
             item.status = Status::Skipped;
-            item.note = Some("旧根里没有知识库。".to_string());
+            item.note = Some(words.none.to_string());
             return Ok(item);
         }
     };
@@ -60,22 +64,19 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
         .partition(|(name, _)| name.starts_with("default-kb/"));
     if mine.is_empty() {
         item.status = Status::Skipped;
-        item.note = Some(format!(
-            "旧版只有内置的默认库（{} 篇，新版不迁）。",
-            builtin.len()
-        ));
+        item.note = Some((words.builtin_only)(builtin.len()));
         return Ok(item);
     }
     match core.call(
         "kb.create",
-        json!({"kb": BASE, "name": "旧版知识库", "description": "从旧版 Miyu 迁过来的文档"}),
+        json!({"kb": BASE, "name": words.name, "description": words.description}),
     ) {
         Ok(_) => {}
         Err(said) if said.code == "kb_exists" => {}
         Err(said) if fatal(&said) => return Err(said),
         Err(said) => {
             item.status = Status::Archived;
-            item.note = Some(format!("建库没成（{}），文档留在压缩包里。", said.code));
+            item.note = Some((words.create_failed)(&said.code));
             return Ok(item);
         }
     }
@@ -134,41 +135,29 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, root: &Path) -> Result<Item, 
         .into_iter()
         .find(|base| base["id"] == BASE)
         .and_then(|base| base["documents"].as_u64());
-    let mut notes = vec![format!(
-        "{} 篇拷进了 `root/kb/{BASE}/`，{present} 篇以前迁过。",
-        item.migrated - present
-    )];
+    let mut notes = vec![(words.copied)(item.migrated - present, BASE, present)];
     if let Some(documents) = documents {
-        notes.push(format!("新版这个库现在认得 {documents} 篇。"));
+        notes.push((words.documents)(documents));
     }
     if item.migrated > present {
-        notes.push(
-            "第一次列出、搜这个库之前新版会先建索引，篇数多要等一会儿，不是卡住了。".to_string(),
-        );
+        notes.push(words.indexing.to_string());
     }
     if other > 0 {
-        notes.push(format!(
-            "{other} 篇不是新版认的类型（只认 md、txt、pdf、html），照拷了，新版不建索引。"
-        ));
+        notes.push((words.other)(other));
     }
     if !builtin.is_empty() {
-        notes.push(format!("旧版内置的默认库 {} 篇不迁。", builtin.len()));
+        notes.push((words.builtin)(builtin.len()));
     }
     if !renamed.is_empty() {
-        notes.push(format!(
-            "新版里已经有同名不一样的，改了名：{}。",
-            renamed.join("、")
-        ));
+        notes.push((words.renamed)(&language.list(&renamed)));
     }
     if mismatch > 0 {
-        notes.push(format!(
-            "{mismatch} 篇和旧清单记的 SHA-256 对不上（旧版记下以后又改过），照现在的文件拷了。"
-        ));
+        notes.push((words.mismatch)(mismatch));
     }
     if !item.skipped.is_empty() {
         item.status = Status::Partial;
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     Ok(item)
 }
 

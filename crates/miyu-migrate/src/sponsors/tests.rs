@@ -131,7 +131,7 @@ fn the_plugin_takes_the_entries_or_the_report_says_why_not() {
         answer: Ok(json!({"added": 1, "skipped": 2})),
         calls: Vec::new(),
     };
-    let item = migrate(&mut core, &layout).unwrap();
+    let item = migrate(&mut core, &layout, Language::Zh).unwrap();
     assert_eq!(item.migrated, 3);
     assert!(
         item.note
@@ -153,7 +153,7 @@ fn the_plugin_takes_the_entries_or_the_report_says_why_not() {
         answer: Ok(json!({})),
         calls: Vec::new(),
     };
-    let item = migrate(&mut missing, &layout).unwrap();
+    let item = migrate(&mut missing, &layout, Language::Zh).unwrap();
     assert_eq!(item.status, Status::Archived);
     assert_eq!(missing.calls.len(), 1, "没装的不调");
     assert!(item.note.unwrap().contains("没装"));
@@ -163,7 +163,7 @@ fn the_plugin_takes_the_entries_or_the_report_says_why_not() {
         answer: Err("bad_params"),
         calls: Vec::new(),
     };
-    let item = migrate(&mut refused, &layout).unwrap();
+    let item = migrate(&mut refused, &layout, Language::Zh).unwrap();
     assert_eq!(item.status, Status::Archived);
     assert!(
         item.note
@@ -188,7 +188,7 @@ fn an_old_plugin_or_an_old_core_is_told_apart_from_a_refusal() {
             answer: Err(code),
             calls: Vec::new(),
         };
-        let item = migrate(&mut old, &layout).unwrap();
+        let item = migrate(&mut old, &layout, Language::Zh).unwrap();
         assert_eq!(item.status, Status::Archived, "{code}");
         assert_eq!(item.migrated, 0, "{code}");
         let note = item.note.unwrap();
@@ -208,7 +208,7 @@ fn no_records_no_questions() {
         answer: Ok(json!({})),
         calls: Vec::new(),
     };
-    let item = migrate(&mut core, &layout).unwrap();
+    let item = migrate(&mut core, &layout, Language::Zh).unwrap();
     assert_eq!(item.status, Status::Skipped);
     assert!(core.calls.is_empty());
 }

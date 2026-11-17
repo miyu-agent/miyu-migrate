@@ -215,6 +215,7 @@ fn plan_in(fresh: &support::Fresh, old: &Path, at: &str, state: std::path::PathB
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     }
 }
 

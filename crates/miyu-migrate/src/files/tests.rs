@@ -61,7 +61,7 @@ fn files_land_in_the_new_folders() {
     let (_old, layout) = old_root();
     let new = tempfile::tempdir().unwrap();
     write(&new.path().join("root/documents/a.md"), b"new a");
-    let item = migrate(&layout, new.path());
+    let item = migrate(&layout, new.path(), Language::Zh);
     let at = |path: &str| fs::read(new.path().join("root").join(path)).unwrap();
     assert_eq!(at("pictures/cat.png"), b"cat");
     assert_eq!(at("pictures/old.png"), b"old", "两处图片合并");
@@ -106,7 +106,7 @@ fn files_land_in_the_new_folders() {
         "{note}"
     );
 
-    let again = migrate(&layout, new.path());
+    let again = migrate(&layout, new.path(), Language::Zh);
     let note = again.note.unwrap();
     assert!(note.contains("拷了 0 个文件，7 个以前迁过"), "{note}");
     assert!(!new.path().join("root/documents/a (旧版 2).md").exists());
@@ -118,6 +118,6 @@ fn an_old_root_without_files_says_so() {
     write(&dir.path().join(".home-layout-v1"), b"owner\n");
     write(&dir.path().join("home/owner/conversation.db"), b"");
     let layout = crate::layout::read(dir.path()).unwrap();
-    let item = migrate(&layout, dir.path());
+    let item = migrate(&layout, dir.path(), Language::Zh);
     assert_eq!(item.status, Status::Skipped);
 }

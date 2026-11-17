@@ -164,7 +164,7 @@ fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
         refuse: None,
         installs: Vec::new(),
     };
-    let item = migrate(&mut with, &layout, out.path()).unwrap();
+    let item = migrate(&mut with, &layout, out.path(), Language::Zh).unwrap();
     assert_eq!(item.migrated, 1);
     let path = with.installs[0]["path"].as_str().unwrap().to_string();
     assert!(path.ends_with("legacy-memes-miyu"), "{path}");
@@ -175,7 +175,7 @@ fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
         refuse: None,
         installs: Vec::new(),
     };
-    let item = migrate(&mut without, &layout, out.path()).unwrap();
+    let item = migrate(&mut without, &layout, out.path(), Language::Zh).unwrap();
     assert!(without.installs.is_empty());
     assert_eq!(item.migrated, 0);
     assert!(
@@ -189,7 +189,7 @@ fn installed_memes_get_the_package_and_missing_ones_get_the_line() {
         refuse: Some("package_invalid"),
         installs: Vec::new(),
     };
-    let item = migrate(&mut refused, &layout, out.path()).unwrap();
+    let item = migrate(&mut refused, &layout, out.path(), Language::Zh).unwrap();
     assert_eq!(item.migrated, 0);
     assert!(item.note.unwrap().contains("没装上（package_invalid）"));
 }

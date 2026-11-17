@@ -217,7 +217,12 @@ fn im_imports_the_file_and_its_counts_land_in_the_report() {
     let out = tempfile::tempdir().unwrap();
     let seen = Arc::new(std::sync::Mutex::new(0));
     let said = "imported from /x: 2 messages, 1 events, 0 judgments\nskipped 1 already in the records and 1 whose number is taken by a different message\n";
-    let item = migrate(&layout, out.path(), &fake(0, said, "", Arc::clone(&seen)));
+    let item = migrate(
+        &layout,
+        out.path(),
+        &fake(0, said, "", Arc::clone(&seen)),
+        Language::Zh,
+    );
     assert_eq!(*seen.lock().unwrap(), 4, "三条消息、一件撤回");
     assert!(out.path().join("qq-records.jsonl").is_file());
     assert_eq!(item.migrated, 3);
@@ -246,6 +251,7 @@ fn without_im_the_file_stays_with_the_line_to_run() {
             "nothing imported: 1 wrong lines in /x\nline 1: bad\n",
             Arc::clone(&seen),
         ),
+        Language::Zh,
     );
     assert_eq!(refused.status, Status::Archived);
     let note = refused.note.unwrap();
@@ -258,6 +264,7 @@ fn without_im_the_file_stays_with_the_line_to_run() {
         &layout,
         out.path(),
         &Importer::new(|_| Err(io::Error::other("no such program"))),
+        Language::Zh,
     );
     assert_eq!(missing.status, Status::Archived);
     assert!(

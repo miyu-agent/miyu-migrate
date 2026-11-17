@@ -15,18 +15,17 @@ use serde_json::{Value, json};
 use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
 
 pub use plan::{Change, Planned, Secret, new_id, plan, segment};
-
-/// 旧格式一句话。
-const FORMAT: &str = "JSONC（去掉注释照 JSON 读，config_version 6）：providers[] 供应商（id、display_name、base_url、protocol、api_key 可多个、models、model_context_window、model_temperature、model_costs、default_model），active_provider，embedding，model_tiers，plugins.vision/web，platforms.qq.admin_users；属主档案在 profile.md";
 
 /// 迁配置：读 `copy` 的旧配置和属主档案，写进 `core`。交回报告的一项（只有名字和条数）。
 ///
 /// # Errors
 ///
 /// 连接断了。
-pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
+pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result<Item, Said> {
+    let words = crate::words::setup::settings(language);
     let path = copy.config();
     let source = path
         .strip_prefix(&copy.root)
@@ -37,10 +36,10 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
         what: "config".to_string(),
         status: Status::Migrated,
         source,
-        format: FORMAT.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
-        target: Some("config.set、secret.set".to_string()),
+        target: Some(words.target.to_string()),
         note: None,
     };
     let Some(old) = std::fs::read_to_string(&path)
@@ -48,7 +47,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
         .and_then(|text| crate::jsonc::parse(&text))
     else {
         item.status = Status::Skipped;
-        item.note = Some("旧根里没有读得懂的配置。".to_string());
+        item.note = Some(words.none.to_string());
         return Ok(item);
     };
     let profile = std::fs::read_to_string(copy.profile()).ok();
@@ -116,30 +115,22 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
     for (key, why) in &planned.left {
         item.skipped.push(skip(key, why));
     }
-    notes.push(format!(
-        "写了 {} 项设置、{secrets} 个密钥（报告只写名字）。",
-        written.len()
-    ));
+    notes.push((words.written)(written.len(), secrets));
     if !planned.renamed.is_empty() {
         let renamed: Vec<String> = planned
             .renamed
             .iter()
             .map(|(old, new)| format!("{old} → {new}"))
             .collect();
-        notes.push(format!(
-            "供应商编号照新版的写法改了：{}。",
-            renamed.join("、")
-        ));
+        notes.push((words.renamed)(&language.list(&renamed)));
     }
     if differ > 0 {
-        notes.push(format!(
-            "{differ} 项读回来和写的不一样，照 `miyu config get` 看一眼。"
-        ));
+        notes.push((words.differ)(differ));
     }
     if !item.skipped.is_empty() {
         item.status = Status::Partial;
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     Ok(item)
 }
 

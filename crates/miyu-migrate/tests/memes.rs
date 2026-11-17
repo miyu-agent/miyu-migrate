@@ -40,6 +40,7 @@ fn the_package_is_made_and_the_core_takes_it() {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     let done = run::run(&plan, &mut core).unwrap();
     let agent: Value =

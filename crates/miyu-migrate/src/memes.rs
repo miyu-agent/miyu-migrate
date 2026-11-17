@@ -16,12 +16,10 @@ use serde_json::{Value, json};
 use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
+use crate::words::Language;
 
 /// 内容包给的那个软件。
 pub const MEMES: &str = "memes";
-
-/// 旧格式一句话。
-const FORMAT: &str = "data/memes/<库>/index.json（{library, version 2, memes:[{id sha256:…, name {zh,en}, file images/…, mime_type, animated, description, usage, tags, origin {platform, conversation_kind, conversation_id, sender_id, sender_name, message_id, sent_at, collected_at}}], disabled_ids}）加 images/ 下的图";
 
 #[derive(Debug, Deserialize)]
 struct Index {
@@ -75,7 +73,13 @@ pub struct Pack {
 /// # Errors
 ///
 /// 连接断了。
-pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, Said> {
+pub fn migrate(
+    core: &mut dyn Core,
+    copy: &Layout,
+    dir: &Path,
+    language: Language,
+) -> Result<Item, Said> {
+    let words = crate::words::packages::memes(language);
     let memes = copy.memes();
     let source = memes
         .strip_prefix(&copy.root)
@@ -85,11 +89,11 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
     let mut item = Item {
         what: "memes".to_string(),
         status: Status::Migrated,
-        source: format!("{source}/<库>"),
-        format: FORMAT.to_string(),
+        source: (words.source)(&source),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
-        target: Some("package.install（memes 的内容包）".to_string()),
+        target: Some(words.target.to_string()),
         note: None,
     };
     let mut libraries: Vec<PathBuf> = fs::read_dir(&memes)
@@ -104,7 +108,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
     libraries.sort();
     if libraries.is_empty() {
         item.status = Status::Skipped;
-        item.note = Some("旧根里没有自己的表情包库。".to_string());
+        item.note = Some(words.none.to_string());
         return Ok(item);
     }
     let mut packs = Vec::new();
@@ -139,10 +143,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
         let path = std::path::absolute(&pack.dir).unwrap_or_else(|_| pack.dir.clone());
         let line = format!("miyu pkg install {}", crate::report::shell_path(&path));
         if !installed {
-            notes.push(format!(
-                "`{}` {} 条：{MEMES} 没装，装上以后跑 `{line}`。",
-                pack.id, pack.count
-            ));
+            notes.push((words.not_installed)(&pack.id, pack.count, MEMES, &line));
             item.status = Status::Partial;
             continue;
         }
@@ -152,22 +153,19 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, dir: &Path) -> Result<Item, S
         ) {
             Ok(_) => {
                 item.migrated += pack.count;
-                notes.push(format!("`{}` 装上了，{} 条。", pack.id, pack.count));
+                notes.push((words.installed)(&pack.id, pack.count));
             }
             Err(said) if fatal(&said) => return Err(said),
             Err(said) => {
                 item.status = Status::Partial;
-                notes.push(format!(
-                    "`{}` 没装上（{}），改好以后跑 `{line}`。",
-                    pack.id, said.code
-                ));
+                notes.push((words.failed)(&pack.id, &said.code, &line));
             }
         }
     }
     if !item.skipped.is_empty() && item.status == Status::Migrated {
         item.status = Status::Partial;
     }
-    item.note = Some(notes.join(""));
+    item.note = Some(language.sentences(&notes));
     Ok(item)
 }
 

@@ -93,7 +93,7 @@ fn own_skills_are_copied_and_the_rest_is_reported() {
         &new.path().join("root/skills/notes/SKILL.md"),
         &skill("notes").replace("skill", "新版的"),
     );
-    let moved = migrate(&layout, new.path());
+    let moved = migrate(&layout, new.path(), Language::Zh);
     let skills = new.path().join("root/skills");
     assert_eq!(moved.skills.migrated, 3);
     assert_eq!(
@@ -153,7 +153,7 @@ fn own_skills_are_copied_and_the_rest_is_reported() {
         vec![("office", "install:office"), ("weather", "install:weather")]
     );
 
-    let again = migrate(&layout, new.path());
+    let again = migrate(&layout, new.path(), Language::Zh);
     assert_eq!(again.skills.migrated, 0, "以前迁过的一样的不再拷");
     assert!(!skills.join("notes-legacy-3").exists());
 }

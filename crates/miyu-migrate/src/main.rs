@@ -7,28 +7,25 @@ use std::process::ExitCode;
 use miyu_client::places::{DataRoot, Env};
 use miyu_migrate::core::Live;
 use miyu_migrate::run::{self, Plan};
-
-const HELP: &str = "用法：miyu migrate <旧目录>
-
-把旧版 Miyu（0.7.x）的数据目录迁进这一版。先停掉旧版，再把旧目录挪开（例如 mv ~/.miyu ~/.miyu-0.7），然后跑这一条。
-旧目录会整个打成压缩包留着；迁完看报告，确认没问题以后再删旧目录。
-";
+use miyu_migrate::words::{Language, cli};
 
 fn main() -> ExitCode {
+    // 连上核心以前照系统语言说，连上以后照核心握手回的（施工 MG-21）。
+    let words = cli::words(Language::system());
     let args: Vec<String> = std::env::args().skip(1).collect();
     let old = match args.as_slice() {
         [flag] if flag == "-h" || flag == "--help" => {
-            print!("{HELP}");
+            print!("{}", words.help);
             return ExitCode::SUCCESS;
         }
         [old] => PathBuf::from(old),
         _ => {
-            eprint!("{HELP}");
+            eprint!("{}", words.help);
             return ExitCode::from(2);
         }
     };
     let Some(state) = std::env::var_os("MIYU_STATE_DIR").map(PathBuf::from) else {
-        eprintln!("run this as `miyu migrate <old folder>`: MIYU_STATE_DIR is not set");
+        eprintln!("miyu migrate: {}", words.no_state_dir);
         return ExitCode::from(2);
     };
     let root = match DataRoot::locate(&Env::current()) {
@@ -48,10 +45,11 @@ fn main() -> ExitCode {
     }) {
         Ok(core) => core,
         Err(said) => {
-            eprintln!("miyu migrate: cannot reach the core: {said}");
+            eprintln!("miyu migrate: {}", (words.cannot_reach)(&said.to_string()));
             return ExitCode::FAILURE;
         }
     };
+    let language = Language::from_core(core.language());
     let plan = Plan {
         old,
         state,
@@ -60,18 +58,15 @@ fn main() -> ExitCode {
         home: std::env::home_dir(),
         records,
         space: run::free_space,
+        language,
     };
     match run::run(&plan, &mut core) {
         Ok(done) => {
-            println!(
-                "报告：{}\n给 agent 的：{}",
-                done.human.display(),
-                done.agent.display()
-            );
+            println!("{}", (cli::words(language).done)(&done.human, &done.agent));
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("miyu migrate: {error}");
+            eprintln!("miyu migrate: {}", error.say(language));
             ExitCode::FAILURE
         }
     }

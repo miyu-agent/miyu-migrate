@@ -15,12 +15,14 @@ use serde_json::Value;
 
 use crate::layout::Layout;
 use crate::report::{Item, Status};
+use crate::words::Language;
+use crate::words::leftovers::Leftovers;
 
-/// 一样零碎：报告里叫什么、在旧根的哪几个相对路径、旧格式一句话、要不要另外数库里的条数。
+/// 一样零碎：报告里叫什么、在旧根的哪几个相对路径、旧格式一句话（从字表里取）、要不要另外数库里的条数。
 struct Entry {
     what: &'static str,
     paths: &'static [&'static str],
-    format: &'static str,
+    format: fn(&Leftovers) -> &'static str,
     status: Status,
 }
 
@@ -33,13 +35,13 @@ const ARCHIVED: &[Entry] = &[
             "state/usage-history.jsonl",
             "state/usage.json",
         ],
-        format: "SQLite usage_records 一次请求一行（供应商、模型、词元、费用、时刻）；新版账本还没有导入入口，以后有了再补",
+        format: |words| words.usage,
         status: Status::Archived,
     },
     Entry {
         what: "repl-history",
         paths: &["state/repl-history"],
-        format: "终端的上键历史：一行一条输入；会话库里另有 repl_history 表",
+        format: |words| words.repl_history,
         status: Status::Archived,
     },
     Entry {
@@ -49,13 +51,13 @@ const ARCHIVED: &[Entry] = &[
             "cache/platform_images",
             "cache/qq-avatars",
         ],
-        format: "QQ 收到的文件、图片、头像原样存的文件；新 im 只存占位，不存内容",
+        format: |words| words.qq_media,
         status: Status::Archived,
     },
     Entry {
         what: "config-backups",
         paths: &["config/config.jsonc.bak*"],
-        format: "旧配置的手动备份（JSONC），内容同 config.jsonc 当时的样子",
+        format: |words| words.config_backups,
         status: Status::Archived,
     },
     Entry {
@@ -66,19 +68,19 @@ const ARCHIVED: &[Entry] = &[
             "state/web-sessions.json",
             "state/web-ui.json",
         ],
-        format: "旧网页的登录密码（哈希）、自定义样式（CSS）、登录会话、界面状态；新版网页另有登录和外观包",
+        format: |words| words.web,
         status: Status::Archived,
     },
     Entry {
         what: "voice",
         paths: &["state/voice-session-id", "cache/voice"],
-        format: "语音会话的编号、缓存；语音的配置在 config.jsonc 的 voice 段（配置那一项报过）",
+        format: |words| words.voice,
         status: Status::Archived,
     },
     Entry {
         what: "alarms",
         paths: &["state/alarms.json"],
-        format: "JSON 数组，一条一个一次性提醒（没有重复的）：label 是要提醒的内容，due_at 是到点的时刻（Unix 秒，已经照当时的本地时区算好的绝对时刻），time 是人当时说的原话（「15:30」「10m」这类），status 是 scheduled 或 ringing，audio_file 是响铃的声音文件；新版对应的方法是 schedule.add（它的参数这里未核实），已经过了 due_at 的不用迁",
+        format: |words| words.alarms,
         status: Status::Archived,
     },
     Entry {
@@ -94,7 +96,7 @@ const ARCHIVED: &[Entry] = &[
             "state/todos",
             "state/compact",
         ],
-        format: "旧版自己的状态：更早的聊天库、表情用到的记录、技能草稿、子代理的检查点、思考档位、角色扮演提示的自动稿、会话的待办、压缩的折叠稿（内容在会话库里，会话那一类已经导了）",
+        format: |words| words.old_state,
         status: Status::Archived,
     },
 ];
@@ -104,7 +106,7 @@ const DERIVED: &[Entry] = &[
     Entry {
         what: "derived/logs",
         paths: &["logs"],
-        format: "运行日志",
+        format: |words| words.logs,
         status: Status::Skipped,
     },
     Entry {
@@ -122,7 +124,7 @@ const DERIVED: &[Entry] = &[
             "cache/sounds",
             "cache/logs",
         ],
-        format: "缓存：表情向量、模型列表、链接预览、图表、剪贴板暂存、命令输出",
+        format: |words| words.cache,
         status: Status::Skipped,
     },
     Entry {
@@ -133,7 +135,7 @@ const DERIVED: &[Entry] = &[
             "cache/default-kb",
             "data/default-kb",
         ],
-        format: "知识库的切块和向量、旧版内置默认库",
+        format: |words| words.kb_index,
         status: Status::Skipped,
     },
     Entry {
@@ -146,7 +148,7 @@ const DERIVED: &[Entry] = &[
             "state/arch_news_last_seen.json",
             "state/thinking-variants.lock",
         ],
-        format: "模型文件的缓存、提示词指纹、中转线状态、启动记录",
+        format: |words| words.derived_state,
         status: Status::Skipped,
     },
 ];
@@ -162,7 +164,8 @@ const OUTSIDE: &[&str] = &[
 ];
 
 /// 零碎这几项：`copy` 是解出来的副本，`home` 是这台机器的家目录（看数据根外面的，测试换成临时目录）。
-pub fn items(copy: &Layout, home: Option<&Path>) -> Vec<Item> {
+pub fn items(copy: &Layout, home: Option<&Path>, language: Language) -> Vec<Item> {
+    let words = crate::words::leftovers::words(language);
     let mut items = Vec::new();
     for entry in ARCHIVED.iter().chain(DERIVED) {
         let found = found(&copy.root, entry.paths);
@@ -173,24 +176,24 @@ pub fn items(copy: &Layout, home: Option<&Path>) -> Vec<Item> {
             let (more, size) = size(path);
             (files + more, bytes + size)
         });
-        let mut note = format!("{files} 个文件，{}。", human_size(bytes));
-        if let Some(count) = counted(copy, entry.what) {
+        let mut note = (words.size)(files, &language.human_size(bytes));
+        if let Some(count) = counted(copy, entry.what, words) {
             note.push_str(&count);
         }
         items.push(item(
             entry.what,
             &found,
             &copy.root,
-            entry.format,
+            (entry.format)(words),
             entry.status,
             note,
         ));
     }
-    items.extend(members(copy));
-    items.extend(platform(copy));
-    items.extend(memory(copy));
+    items.extend(members(copy, words));
+    items.extend(platform(copy, language));
+    items.extend(memory(copy, language));
     if let Some(home) = home {
-        items.extend(outside(home));
+        items.extend(outside(home, words));
     }
     items
 }
@@ -243,15 +246,15 @@ fn size(path: &Path) -> (u64, u64) {
 }
 
 /// 几样另外数库里的条数。
-fn counted(copy: &Layout, what: &str) -> Option<String> {
+fn counted(copy: &Layout, what: &str, words: &Leftovers) -> Option<String> {
     match what {
         "usage" => count(
             &copy.root.join("state/usage.db"),
             "SELECT COUNT(*) FROM usage_records",
         )
-        .map(|n| format!("用量 {n} 条。")),
+        .map(words.usage_count),
         "repl-history" => count(&copy.conversation_db(), "SELECT COUNT(*) FROM repl_history")
-            .map(|n| format!("会话库里另有 repl_history {n} 条。")),
+            .map(words.repl_count),
         "alarms" => {
             let text = fs::read_to_string(copy.root.join("state/alarms.json")).ok()?;
             let alarms: Vec<Value> = serde_json::from_str(&text).ok()?;
@@ -260,10 +263,7 @@ fn counted(copy: &Layout, what: &str) -> Option<String> {
                 .iter()
                 .filter(|one| one["due_at"].as_i64().is_some_and(|due| due > now))
                 .count();
-            Some(format!(
-                "提醒 {} 条，还没到点的 {pending} 条。",
-                alarms.len()
-            ))
+            Some((words.alarms_count)(alarms.len(), pending))
         }
         _ => None,
     }
@@ -276,7 +276,7 @@ fn count(db: &Path, sql: &str) -> Option<i64> {
 }
 
 /// 成员的家目录：只数个数，不写名字。
-fn members(copy: &Layout) -> Option<Item> {
+fn members(copy: &Layout, words: &Leftovers) -> Option<Item> {
     let admin = copy.admin.clone()?;
     let home = copy.root.join("home");
     let others = fs::read_dir(&home)
@@ -287,19 +287,18 @@ fn members(copy: &Layout) -> Option<Item> {
     (others > 0).then(|| Item {
         what: "members".to_string(),
         status: Status::Archived,
-        source: "home/<别的用户>/".to_string(),
-        format: "成员各自的家目录：会话库、知识库、记账、工作目录（新版只给一个人用）".to_string(),
+        source: words.members_source.to_string(),
+        format: words.members_format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: None,
-        note: Some(format!(
-            "{others} 个成员的家目录，没迁（新版只给一个人用）。"
-        )),
+        note: Some((words.members_note)(others)),
     })
 }
 
 /// 会话库里平台的几张表：插件键值照插件数条数（好感度、情绪这类要在新 im 里重做），表情引用、会话绑定只数条数。
-fn platform(copy: &Layout) -> Option<Item> {
+fn platform(copy: &Layout, language: Language) -> Option<Item> {
+    let words = crate::words::leftovers::words(language);
     let db = copy.conversation_db();
     let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE).ok()?;
     let mut parts = Vec::new();
@@ -308,43 +307,44 @@ fn platform(copy: &Layout) -> Option<Item> {
     ) {
         let plugins: Vec<String> = statement
             .query_map([], |row| {
-                Ok(format!(
-                    "{} {} 条",
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?
+                Ok((words.plugin_rows)(
+                    &row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
                 ))
             })
             .map(|rows| rows.filter_map(Result::ok).collect())
             .unwrap_or_default();
         if !plugins.is_empty() {
-            parts.push(format!(
-                "插件键值（{}），新 im 没有对应的，要重做",
-                plugins.join("、")
-            ));
+            parts.push((words.plugins)(&language.list(&plugins)));
         }
     }
-    for (table, name) in [
-        ("platform_meme_refs", "表情引用"),
-        ("platform_session_bindings", "会话绑定"),
-    ] {
+    for (table, name) in ["platform_meme_refs", "platform_session_bindings"]
+        .into_iter()
+        .zip(words.platform_tables)
+    {
         if let Some(n) = count(&db, &format!("SELECT COUNT(*) FROM {table}")).filter(|n| *n > 0) {
-            parts.push(format!("{name} {n} 条"));
+            parts.push((words.table_rows)(name, n));
         }
     }
     (!parts.is_empty()).then(|| Item {
         what: "platform-tables".to_string(),
         status: Status::Archived,
-        source: format!("{}（platform_plugin_kv、platform_meme_refs、platform_session_bindings）", relative(&db, &copy.root)),
-        format: "platform_plugin_kv：(plugin_id, platform, account_id, conversation_kind, conversation_id, key) → value_json；platform_meme_refs：哪条消息用了哪张表情；platform_session_bindings：QQ 会话绑在哪个会话（会话那一类已经照它导了）".to_string(),
+        source: (words.platform_source)(&relative(&db, &copy.root)),
+        format: words.platform_format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: None,
-        note: Some(format!("{}。", parts.join("；"))),
+        note: Some(format!(
+            "{}{}",
+            parts.join(language.semicolon()),
+            words.full_stop
+        )),
     })
 }
 
 /// 记忆的经历、日记、改动、旧向量：每个人格数一数。
-fn memory(copy: &Layout) -> Option<Item> {
+fn memory(copy: &Layout, language: Language) -> Option<Item> {
+    let words = crate::words::leftovers::words(language);
     let dir = copy.personas();
     let mut scopes: Vec<String> = fs::read_dir(&dir)
         .ok()?
@@ -358,39 +358,40 @@ fn memory(copy: &Layout) -> Option<Item> {
         let db = dir.join(scope).join("memory/memory.db");
         let mut counts = Vec::new();
         for (sql, name) in [
-            (
-                "SELECT COUNT(*) FROM episodes WHERE retention = 'short_term'",
-                "逐轮经历",
-            ),
-            (
-                "SELECT COUNT(*) FROM episodes WHERE retention != 'short_term'",
-                "日记",
-            ),
-            ("SELECT COUNT(*) FROM memory_revisions", "改动记录"),
-            ("SELECT COUNT(*) FROM memory_embeddings", "旧向量"),
-        ] {
+            "SELECT COUNT(*) FROM episodes WHERE retention = 'short_term'",
+            "SELECT COUNT(*) FROM episodes WHERE retention != 'short_term'",
+            "SELECT COUNT(*) FROM memory_revisions",
+            "SELECT COUNT(*) FROM memory_embeddings",
+        ]
+        .into_iter()
+        .zip(words.memory_kinds)
+        {
             if let Some(n) = count(&db, sql).filter(|n| *n > 0) {
-                counts.push(format!("{name} {n}"));
+                counts.push((words.memory_rows)(name, n));
             }
         }
         if !counts.is_empty() {
-            parts.push(format!("`{scope}`：{}", counts.join("、")));
+            parts.push((words.memory_scope)(scope, &language.list(&counts)));
         }
     }
     (!parts.is_empty()).then(|| Item {
         what: "memory-rest".to_string(),
         status: Status::Archived,
-        source: format!("{}/<人格>/memory/memory.db", relative(&dir, &copy.root)),
-        format: "episodes（retention short_term 是逐轮经历、long_term 是日记；content、created_at、origin_*）、memory_revisions、memory_embeddings、pending_events、skill_records；知识点 facts 记忆那一类已经导了".to_string(),
+        source: (words.memory_source)(&relative(&dir, &copy.root)),
+        format: words.memory_format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: None,
-        note: Some(format!("{}。", parts.join("；"))),
+        note: Some(format!(
+            "{}{}",
+            parts.join(language.semicolon()),
+            words.full_stop
+        )),
     })
 }
 
 /// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版的照实说（[`is_new_miyu`]）。
-fn outside(home: &Path) -> Vec<Item> {
+fn outside(home: &Path, words: &Leftovers) -> Vec<Item> {
     OUTSIDE
         .iter()
         .filter(|path| home.join(path).exists())
@@ -398,19 +399,19 @@ fn outside(home: &Path) -> Vec<Item> {
             let full = home.join(path);
             let newer = *path == ".local/bin/miyu" && is_new_miyu(home, &full);
             let note = if newer {
-                "这是新版的 miyu，不是旧版的，别删。".to_string()
+                words.outside_new
             } else {
-                "旧版装过这个，确认是旧版的、用不着了再删；删不删由你定。".to_string()
+                words.outside_old
             };
             Item {
                 what: format!("outside/{path}"),
                 status: Status::Skipped,
                 source: format!("~/{path}"),
-                format: "数据根外面的文件，不在压缩包里".to_string(),
+                format: words.outside_format.to_string(),
                 migrated: 0,
                 skipped: Vec::new(),
                 target: None,
-                note: Some(note),
+                note: Some(note.to_string()),
             }
         })
         .collect()
@@ -458,15 +459,6 @@ fn relative(path: &Path, root: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
-}
-
-/// 字节数写成给人看的（KB、MB）。
-pub fn human_size(bytes: u64) -> String {
-    match bytes {
-        0..1024 => format!("{bytes} 字节"),
-        1024..1_048_576 => format!("{:.1} KB", bytes as f64 / 1024.0),
-        _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),
-    }
 }
 
 #[cfg(test)]

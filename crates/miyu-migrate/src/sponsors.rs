@@ -9,6 +9,8 @@ use serde_json::{Value, json};
 use crate::core::{Core, Said};
 use crate::layout::Layout;
 use crate::report::{Item, Status};
+use crate::words::Language;
+use crate::words::setup::Sponsors;
 
 /// 赞助插件：`package.list` 里照它看装没装。
 pub const SPONSOR: &str = "im-sponsor";
@@ -16,27 +18,25 @@ pub const SPONSOR: &str = "im-sponsor";
 /// 赞助插件在总线上提供的名字（im 施工 I-211）：导的时候照它调，不写插件的包编号。
 pub const BUS_NAME: &str = "sponsor";
 
-/// 旧格式一句话。
-const FORMAT: &str = "会话库（SQLite v32 起）的 sponsor_records：platform（onebot）、account_id、sponsor_id（QQ 号或名字）、sponsor_name、amount_minor（分）、currency、cny_minor、fx_rate（同币种写 0）、note、recorded_by、sponsored_at（RFC 3339）";
-
 /// 迁赞助记录：读 `copy` 的会话库，经 `core` 交赞助插件导。交回报告的一项。
 ///
 /// # Errors
 ///
 /// 连接断了。
-pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
+pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result<Item, Said> {
+    let words = crate::words::setup::sponsors(language);
     let path = copy.conversation_db();
     let mut item = Item {
         what: "sponsors".to_string(),
         status: Status::Migrated,
-        source: format!(
-            "{}（sponsor_records）",
-            path.strip_prefix(&copy.root)
+        source: (words.source)(
+            &path
+                .strip_prefix(&copy.root)
                 .unwrap_or(&path)
                 .to_string_lossy()
-                .replace('\\', "/")
+                .replace('\\', "/"),
         ),
-        format: FORMAT.to_string(),
+        format: words.format.to_string(),
         migrated: 0,
         skipped: Vec::new(),
         target: Some(format!("bus.call {BUS_NAME}.import")),
@@ -46,7 +46,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
         Ok(entries) if !entries.is_empty() => entries,
         _ => {
             item.status = Status::Skipped;
-            item.note = Some("旧版没有赞助记录。".to_string());
+            item.note = Some(words.none.to_string());
             return Ok(item);
         }
     };
@@ -57,10 +57,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
         .is_some_and(|all| all.iter().any(|one| one["package"] == SPONSOR));
     if !installed {
         item.status = Status::Archived;
-        item.note = Some(format!(
-            "{} 笔赞助记录：赞助插件 `{SPONSOR}` 没装，装上以后重跑迁移（重跑不会多出来）。",
-            entries.len()
-        ));
+        item.note = Some((words.not_installed)(entries.len(), SPONSOR));
         return Ok(item);
     }
     let params = json!({"name": BUS_NAME, "method": "import", "params": {"entries": entries}});
@@ -69,10 +66,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
             let added = answer["added"].as_u64().unwrap_or_default();
             let skipped = answer["skipped"].as_u64().unwrap_or_default();
             item.migrated = added + skipped;
-            item.note = Some(format!(
-                "{} 笔赞助记录：新加 {added} 笔，{skipped} 笔账本里本来就有（以前导过、记过的）。",
-                entries.len()
-            ));
+            item.note = Some((words.imported)(entries.len(), added, skipped));
             if added + skipped != entries.len() as u64 {
                 item.status = Status::Partial;
             }
@@ -87,20 +81,11 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
         }
         Err(said) => {
             item.status = Status::Archived;
-            item.note = Some(match outdated(&said.code) {
+            item.note = Some(match outdated(&said.code, words) {
                 // 装着但是调不到（施工 MG-17）：写清楚升级哪一个，不退回旧名字再试（迁移程序和包一起发新版）。
-                Some((why, upgrade)) => format!(
-                    "{} 笔赞助记录：{why}（{}），留在压缩包里；{upgrade}以后重跑迁移（重跑不会多出来）。",
-                    entries.len(),
-                    said.code
-                ),
+                Some((why, upgrade)) => (words.outdated)(entries.len(), &why, &said.code, &upgrade),
                 // 插件拒的话里写着第几笔哪一格不对，没有名字和金额，照原样写。
-                None => format!(
-                    "{} 笔赞助记录没导进去（{}：{}），留在压缩包里。",
-                    entries.len(),
-                    said.code,
-                    said.message
-                ),
+                None => (words.refused)(entries.len(), &said.code, &said.message),
             });
         }
     }
@@ -111,16 +96,13 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout) -> Result<Item, Said> {
 ///
 /// - `no_provider`：总线上没有 `sponsor`（插件是 I-211 以前的，或者停用了）；`unregistered`、`not_exported`：没有 `sponsor.import`。
 /// - `unknown_method`：核心不认 `bus.call`（总线以前的核心）。
-fn outdated(code: &str) -> Option<(String, String)> {
+fn outdated(code: &str, words: &Sponsors) -> Option<(String, String)> {
     match code {
         "no_provider" | "unregistered" | "not_exported" => Some((
-            format!("总线上调不到赞助插件的 `{BUS_NAME}.import`，装着的插件太旧或者停用了"),
-            format!("把赞助插件 `{SPONSOR}` 升级（停用了的先启用）"),
+            (words.no_bus_name)(BUS_NAME),
+            (words.upgrade_plugin)(SPONSOR),
         )),
-        "unknown_method" => Some((
-            "这一版 Miyu 不认 `bus.call`，太旧".to_string(),
-            "把 Miyu 升级".to_string(),
-        )),
+        "unknown_method" => Some((words.old_core.to_string(), words.upgrade_core.to_string())),
         _ => None,
     }
 }

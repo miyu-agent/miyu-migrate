@@ -1,4 +1,5 @@
-//! 两份报告（细则第十二节，DESIGN 第六节第 9 条）：给人看的 `报告.md`，给 agent 读的 `给agent.json`。都只写位置、条数和
+//! 两份报告（细则第十二节，DESIGN 第六节第 9 条）：给人看的 `报告.md`，给 agent 读的 `给agent.json`（英文的叫 `report.md`、
+//! `for-agent.json`，MG-21）。都只写位置、条数和
 //! 为什么，不带旧数据的内容。每一类迁完往里加一项；迁不了的不硬迁，写明它在压缩包里的哪个路径、旧格式是什么样。
 
 use std::fs;
@@ -6,6 +7,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+use crate::words::Language;
 
 /// 给 agent 读的那份的格式版本。
 pub const FORMAT: u32 = 1;
@@ -103,12 +106,14 @@ pub enum Status {
 }
 
 impl Status {
-    fn zh(self) -> &'static str {
+    /// 给人看的状态（字在 [`crate::words::report`]）。
+    fn shown(self, language: Language) -> &'static str {
+        let status = &crate::words::report::words(language).status;
         match self {
-            Status::Migrated => "迁了",
-            Status::Partial => "迁了一部分",
-            Status::Archived => "没迁，在压缩包里",
-            Status::Skipped => "不用迁",
+            Status::Migrated => status[0],
+            Status::Partial => status[1],
+            Status::Archived => status[2],
+            Status::Skipped => status[3],
         }
     }
 }
@@ -140,26 +145,22 @@ pub struct Pending {
 }
 
 impl Report {
-    /// 给人看的那份：一段话、每一类一节、没迁的一张表。
-    pub fn human(&self) -> String {
-        let mut out = format!(
-            "# 旧版 Miyu 迁移报告\n\n迁移时刻：{}。旧数据目录：`{}`（{}）。\n\n",
-            self.at, self.old_root.path, self.old_root.layout
-        );
+    /// 给人看的那份：一段话、每一类一节、没迁的一张表；字照 `language`（[`crate::words::report`]），各类的那一句迁的时候已经照
+    /// 同一个语言写好了。
+    pub fn human(&self, language: Language) -> String {
+        let words = crate::words::report::words(language);
+        let mut out = (words.intro)(&self.at, &self.old_root.path, &self.old_root.layout);
         if let Some(archive) = &self.archive {
-            out.push_str(&format!(
-                "旧目录整个打成了压缩包：`{}`。最后一节「旧数据根」写了什么时候可以删旧目录。\n\n",
-                archive.path
-            ));
+            out.push_str(&(words.archive_intro)(&archive.path));
         }
         if !self.personas.is_empty() {
-            out.push_str("## 人格\n\n| 旧版 | 名字 | 新版 | 怎么来的 |\n|---|---|---|---|\n");
+            out.push_str(words.personas);
             for row in &self.personas {
                 let how = match row.how {
-                    crate::personas::How::Created => "新建",
-                    crate::personas::How::Existing => "已经有同名的",
-                    crate::personas::How::Engineer => "出厂的软件工程师",
-                    crate::personas::How::Missing => "没映射上",
+                    crate::personas::How::Created => words.how[0],
+                    crate::personas::How::Existing => words.how[1],
+                    crate::personas::How::Engineer => words.how[2],
+                    crate::personas::How::Missing => words.how[3],
                 };
                 out.push_str(&format!(
                     "| `{}` | {} | {} | {how}{} |\n",
@@ -168,14 +169,12 @@ impl Report {
                     row.new
                         .as_deref()
                         .map_or("—".to_string(), |new| format!("`{new}`")),
-                    row.note
-                        .as_deref()
-                        .map_or(String::new(), |note| format!("（{note}）")),
+                    row.note.as_deref().map_or(String::new(), words.how_note),
                 ));
             }
             out.push('\n');
         }
-        out.push_str("## 每一类\n\n");
+        out.push_str(words.items);
         // 派生的、数据根外面的另外写：派生的合成一行，数据根外面的单独一节。给 agent 的那份照样逐条。
         let derived = self
             .items
@@ -192,18 +191,17 @@ impl Report {
             .iter()
             .filter(|item| !item.what.starts_with("derived/") && !item.what.starts_with("outside/"))
         {
-            out.push_str(&format!(
-                "### {}\n\n{}，{} 条",
-                item.what,
-                item.status.zh(),
-                item.migrated
+            out.push_str(&(words.item)(
+                &item.what,
+                item.status.shown(language),
+                item.migrated,
             ));
             if !item.skipped.is_empty() {
-                out.push_str(&format!("，跳过 {} 条", item.skipped.len()));
+                out.push_str(&(words.skipped)(item.skipped.len()));
             }
-            out.push_str("。\n");
+            out.push_str(words.end);
             if let Some(target) = &item.target {
-                out.push_str(&format!("迁到：`{target}`。\n"));
+                out.push_str(&(words.target)(target));
             }
             if let Some(note) = &item.note {
                 out.push_str(&format!("{note}\n"));
@@ -211,16 +209,15 @@ impl Report {
             out.push('\n');
         }
         if derived > 0 {
-            out.push_str(&format!(
-                "### 派生的缓存\n\n{derived} 处（日志、缓存、知识库的向量这些）不迁，新版自己重建；给 agent 的那份逐条列着。\n\n"
-            ));
+            out.push_str(&(words.derived)(derived));
         }
         if !outside.is_empty() {
-            out.push_str("## 数据根外面\n\n旧版在数据根外面装过这些，不在压缩包里：\n\n");
+            out.push_str(words.outside);
             for item in outside {
                 out.push_str(&format!(
-                    "- `{}`：{}\n",
+                    "- `{}`{}{}\n",
                     item.source,
+                    words.outside_colon,
                     item.note.as_deref().unwrap_or_default()
                 ));
             }
@@ -232,30 +229,28 @@ impl Report {
             .filter(|item| matches!(item.status, Status::Archived | Status::Partial))
             .collect();
         if !left.is_empty() {
-            out.push_str("## 没迁的\n\n要的时候，让 agent 照同一目录里的 `给agent.json` 接着迁。\n\n| 东西 | 在压缩包里 | 旧格式 |\n|---|---|---|\n");
+            out.push_str(&(words.left)(words.agent_file));
             for item in left {
                 out.push_str(&format!(
                     "| {} | `{}` | {} |\n",
-                    item.what, item.source, item.format
+                    item.what,
+                    shown_source(&item.source, language),
+                    item.format
                 ));
             }
             out.push('\n');
         }
-        out.push_str(&format!(
-            "## 旧数据根\n\n旧数据目录 `{}` 迁移一个字节都没动。",
-            self.old_root.path
-        ));
+        out.push_str(&(words.old_root)(&self.old_root.path));
         if let Some(archive) = &self.archive {
-            out.push_str(&format!(
-                "完整的压缩包在 `{}`：{} 个文件、原来一共 {}，整个包的 SHA-256 是 `{}`；逐文件的清单在 `{}`。",
-                archive.path,
+            out.push_str(&(words.archive)(
+                &archive.path,
                 archive.files,
-                crate::leftovers::human_size(archive.bytes),
-                archive.sha256,
-                archive.manifest
+                &language.human_size(archive.bytes),
+                &archive.sha256,
+                &archive.manifest,
             ));
         }
-        out.push_str("确认都迁过来了、新版用了一阵没问题以后，再删旧数据目录（压缩包留着）；删由你自己来，迁移程序不删。\n");
+        out.push_str(words.delete_later);
         out
     }
 
@@ -268,19 +263,25 @@ impl Report {
         serde_json::to_string_pretty(self)
     }
 
-    /// 两份都写进 `dir`，交回两个文件的位置。
+    /// 两份都写进 `dir`，交回两个文件的位置；文件名照 `language`（`报告.md`、`给agent.json`，英文 `report.md`、`for-agent.json`）。
     ///
     /// # Errors
     ///
     /// 写不进去。
-    pub fn write(&self, dir: &Path) -> io::Result<(PathBuf, PathBuf)> {
+    pub fn write(&self, dir: &Path, language: Language) -> io::Result<(PathBuf, PathBuf)> {
         fs::create_dir_all(dir)?;
-        let human = dir.join("报告.md");
-        let agent = dir.join("给agent.json");
-        fs::write(&human, self.human())?;
+        let words = crate::words::report::words(language);
+        let human = dir.join(words.human_file);
+        let agent = dir.join(words.agent_file);
+        fs::write(&human, self.human(language))?;
         fs::write(&agent, self.agent().map_err(io::Error::other)? + "\n")?;
         Ok((human, agent))
     }
+}
+
+/// 给人看的来源：几份的在给 agent 的那份里照旧是「、」并起来的，给人看的照语言重新列（英文用逗号）。
+fn shown_source(source: &str, language: Language) -> String {
+    language.list(&source.split('、').collect::<Vec<_>>())
 }
 
 /// 报告里给人照抄进终端的路径：只有字母、数字和 `/._-+:,@%~` 的照原样，别的（空格、中文目录名带的空格这些）加引号。没有单引号的用

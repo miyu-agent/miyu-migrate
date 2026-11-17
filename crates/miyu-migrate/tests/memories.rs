@@ -77,6 +77,7 @@ fn facts_land_in_the_mapped_persona_once() {
         records: miyu_migrate::records::Importer::new(|_| Err(std::io::Error::other("no im"))),
         home: None,
         space: run::free_space,
+        language: miyu_migrate::words::Language::Zh,
     };
     let done = run::run(&plan, &mut core).unwrap();
     let agent: Value = serde_json::from_str(&std::fs::read_to_string(done.agent).unwrap()).unwrap();
