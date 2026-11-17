@@ -128,6 +128,8 @@ impl Stage {
             main,
             miyu: format!("miyu-migrate {}", env!("CARGO_PKG_VERSION")),
             exported: exported.to_string(),
+            // 迁过来的会话不另放给人看的 Markdown：核心导入只认日志，旧版的原文在迁移报告里。
+            transcript: None,
         };
         bundle::write(&parts, &self.blobs, &about, &out)
             .map_err(|error| StageError::Bundle(format!("{error:?}")))?;

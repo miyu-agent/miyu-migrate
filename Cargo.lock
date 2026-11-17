@@ -940,6 +940,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -962,6 +968,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",
@@ -1496,28 +1503,26 @@ dependencies = [
 
 [[package]]
 name = "miyu-assemble"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
 ]
 
 [[package]]
 name = "miyu-basesystem"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
- "getrandom 0.4.3",
  "globset",
- "grep-matcher",
  "grep-regex",
  "grep-searcher",
  "ignore",
  "memchr",
+ "miyu-call",
  "miyu-fs",
  "miyu-kernel",
- "miyu-pipe",
  "miyu-policy",
  "miyu-sandbox",
  "miyu-store",
@@ -1531,9 +1536,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "miyu-call"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
+dependencies = [
+ "getrandom 0.4.3",
+ "miyu-kernel",
+ "miyu-pipe",
+ "miyu-sandbox",
+ "miyu-tool",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "miyu-client"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-config",
  "miyu-heap",
@@ -1549,8 +1571,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-config"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "serde",
  "serde_json",
@@ -1560,8 +1582,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-core"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-basesystem",
  "miyu-config",
@@ -1592,8 +1614,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-drivers"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
  "miyu-kernel",
@@ -1603,17 +1625,24 @@ dependencies = [
 
 [[package]]
 name = "miyu-endpoint"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "croner",
  "getrandom 0.4.3",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "jiff",
  "memchr",
  "miyu-assemble",
+ "miyu-call",
  "miyu-config",
  "miyu-fs",
+ "miyu-heap",
  "miyu-http",
  "miyu-ipc",
  "miyu-kernel",
@@ -1640,8 +1669,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-fs"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "ignore",
  "jiff",
@@ -1655,8 +1684,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-goal"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
  "miyu-tool",
@@ -1666,16 +1695,18 @@ dependencies = [
 
 [[package]]
 name = "miyu-heap"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "libc",
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "miyu-http"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "bytes",
  "h2",
@@ -1694,10 +1725,11 @@ dependencies = [
 
 [[package]]
 name = "miyu-ipc"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "getrandom 0.4.3",
+ "miyu-kernel",
  "miyu-pipe",
  "miyu-store",
  "rustix",
@@ -1709,8 +1741,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-kernel"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "serde",
  "serde_json",
@@ -1719,8 +1751,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-knowledge"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
  "miyu-tool",
@@ -1730,8 +1762,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-log"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "jiff",
  "miyu-config",
@@ -1741,8 +1773,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-mcp"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.4.3",
@@ -1757,8 +1789,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-memory"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
  "miyu-recall",
@@ -1796,8 +1828,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-models"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-config",
  "miyu-drivers",
@@ -1810,8 +1842,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-net"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
@@ -1820,6 +1852,7 @@ dependencies = [
  "miyu-config",
  "miyu-http",
  "miyu-kernel",
+ "miyu-models",
  "miyu-store",
  "miyu-tool",
  "reqwest",
@@ -1831,17 +1864,18 @@ dependencies = [
 
 [[package]]
 name = "miyu-pipe"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
+ "libc",
  "tokio",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "miyu-policy"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-assemble",
  "miyu-config",
@@ -1855,8 +1889,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-recall"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
  "serde",
@@ -1866,16 +1900,13 @@ dependencies = [
 
 [[package]]
 name = "miyu-sandbox"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
- "base64 0.22.1",
- "getrandom 0.4.3",
  "landlock",
  "libc",
- "miyu-kernel",
- "miyu-store",
  "mxc-sdk",
+ "rustix",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
@@ -1883,10 +1914,11 @@ dependencies = [
 
 [[package]]
 name = "miyu-schedule"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
+ "miyu-recall",
  "miyu-tool",
  "serde",
  "serde_json",
@@ -1894,8 +1926,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-seeds"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "image",
  "material-colors",
@@ -1903,9 +1935,10 @@ dependencies = [
 
 [[package]]
 name = "miyu-session"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
+ "base64 0.22.1",
  "miyu-config",
  "miyu-drivers",
  "miyu-fs",
@@ -1918,6 +1951,7 @@ dependencies = [
  "miyu-sandbox",
  "miyu-store",
  "miyu-tool",
+ "serde",
  "serde_json",
  "sha2",
  "tokio",
@@ -1927,8 +1961,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-source"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -1948,8 +1982,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-store"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "argon2",
  "getrandom 0.4.3",
@@ -1971,8 +2005,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-tool"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "image",
  "imagesize 0.15.0",
@@ -1988,8 +2022,8 @@ dependencies = [
 
 [[package]]
 name = "miyu-view"
-version = "0.0.0"
-source = "git+https://github.com/miyu-agent/miyu?rev=65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f#65b0c2188bdc2b9f6d3bd9146acdd649efc05c2f"
+version = "2026.11.0"
+source = "git+https://github.com/miyu-agent/miyu?rev=70e9ab92ec2c78c041f9e12077d0f7d176d59942#70e9ab92ec2c78c041f9e12077d0f7d176d59942"
 dependencies = [
  "miyu-kernel",
  "serde",

@@ -54,7 +54,8 @@ pub fn fresh_in(parent: &Path) -> Fresh {
             let resources =
                 ResourceRoot::at(Path::new(miyu_client::WORKSPACE_ROOT).join("resources"));
             // 配置清单照真核心起来时那样拼：包声明的项（供应商、模型、搜索……）也在。
-            let mut found = miyu_endpoint::packages::load(&resources, &serving);
+            // 测试不读系统里发行版装的包（第三个参数），只认数据根自己的。
+            let mut found = miyu_endpoint::packages::load(&resources, &serving, Vec::new());
             let packaged = miyu_core::settings::Packaged::of(&mut found);
             let config = miyu_endpoint::config::Config::load(
                 &serving,
