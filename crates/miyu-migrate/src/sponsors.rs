@@ -43,8 +43,8 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result
         note: None,
     };
     // 没有会话库、没有这张表、表是空的才是「没有」；库在却读不了的写原因，记录留在压缩包里。
-    let entries = match path.is_file().then(|| read(&path)) {
-        Some(Ok(entries)) if !entries.is_empty() => entries,
+    let all = match path.is_file().then(|| read(&path)) {
+        Some(Ok(all)) if !all.is_empty() => all,
         None | Some(Ok(_)) => {
             item.status = Status::Skipped;
             item.note = Some(words.none.to_string());
@@ -56,6 +56,40 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result
             return Ok(item);
         }
     };
+    // 时刻读不懂的（`at` 是 null）不送：赞助插件见一笔不对整份拒收（审计 #140），这几笔留在压缩包里、报告写几笔，别的照导。
+    let (entries, unreadable): (Vec<Value>, Vec<Value>) =
+        all.into_iter().partition(|one| one["at"].is_i64());
+    if entries.is_empty() {
+        item.status = Status::Archived;
+    } else {
+        send(core, &entries, words, &mut item)?;
+    }
+    if !unreadable.is_empty() {
+        if item.status == Status::Migrated {
+            item.status = Status::Partial;
+        }
+        let notes: Vec<String> = item
+            .note
+            .take()
+            .into_iter()
+            .chain([(words.unreadable_times)(unreadable.len())])
+            .collect();
+        item.note = Some(language.sentences(&notes));
+    }
+    Ok(item)
+}
+
+/// 把 `entries` 经 `core` 交赞助插件导，结果写进 `item`。
+///
+/// # Errors
+///
+/// 连接断了。
+fn send(
+    core: &mut dyn Core,
+    entries: &[Value],
+    words: &Sponsors,
+    item: &mut Item,
+) -> Result<(), Said> {
     let installed = core
         .call("package.list", json!({}))?
         .get("packages")
@@ -64,7 +98,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result
     if !installed {
         item.status = Status::Archived;
         item.note = Some((words.not_installed)(entries.len(), SPONSOR));
-        return Ok(item);
+        return Ok(());
     }
     let params = json!({"name": BUS_NAME, "method": "import", "params": {"entries": entries}});
     match core.call("bus.call", params) {
@@ -95,7 +129,7 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result
             });
         }
     }
-    Ok(item)
+    Ok(())
 }
 
 /// 核心拒的代码 `code` 说的是「对方太旧」的：交回（怎么回事，升级哪一个）。别的原因是空的。
@@ -168,11 +202,11 @@ pub struct Row {
     pub note: String,
     /// `recorded_by`。
     pub by: String,
-    /// `sponsored_at`（RFC 3339）。
+    /// `sponsored_at`（RFC 3339；没写时区的当 UTC，见 [`entry`]）。
     pub at: String,
 }
 
-/// 一行换成账本的一笔（im 设计 03 第五节第 6 条）。
+/// 一行换成账本的一笔（im 设计 03 第五节第 6 条）。时刻读不懂的 `at` 写 null（[`millis`]），迁移不送这一笔。
 pub fn entry(row: &Row) -> Value {
     let platform = match row.platform.as_str() {
         "onebot" | "" => "qq".to_string(),
@@ -190,11 +224,7 @@ pub fn entry(row: &Row) -> Value {
     } else {
         Value::Null
     };
-    let at = row
-        .at
-        .trim()
-        .parse::<jiff::Timestamp>()
-        .map_or(0, |at| at.as_millisecond());
+    let at = millis(&row.at).map_or(Value::Null, |at| json!(at));
     let by = row.by.trim();
     let by = if by.is_empty() {
         Value::Null
@@ -223,6 +253,17 @@ pub fn entry(row: &Row) -> Value {
         "by": by,
         "venue": Value::Null,
     })
+}
+
+/// 旧库的时刻换成 1970 年起的毫秒：RFC 3339；没写时区的 `YYYY-MM-DD HH:MM:SS`（`T` 隔开也行）当 UTC。读不懂的、
+/// 不在 1970 年以后的（赞助插件不收）交回空的。
+pub fn millis(text: &str) -> Option<i64> {
+    let text = text.trim();
+    let at = text.parse::<jiff::Timestamp>().ok().or_else(|| {
+        let civil = text.parse::<jiff::civil::DateTime>().ok()?;
+        Some(civil.to_zoned(jiff::tz::TimeZone::UTC).ok()?.timestamp())
+    })?;
+    Some(at.as_millisecond()).filter(|at| *at > 0)
 }
 
 /// 分换成元：整的写整数，有零头的写两位小数。

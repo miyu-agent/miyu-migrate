@@ -32,6 +32,8 @@ pub struct Sponsors {
     pub not_installed: fn(usize, &str) -> String,
     /// 导了：几笔、新加几笔、本来就有几笔。
     pub imported: fn(usize, u64, u64) -> String,
+    /// 时刻读不懂、没迁的：几笔。
+    pub unreadable_times: fn(usize) -> String,
     /// 对方太旧：几笔、怎么回事、拒的代码、升级哪一个。
     pub outdated: fn(usize, &str, &str, &str) -> String,
     /// 插件拒了：几笔、拒的代码、原话。
@@ -83,6 +85,7 @@ static SPONSORS_ZH: Sponsors = Sponsors {
     imported: |n, added, skipped| {
         format!("{n} 笔赞助记录：新加 {added} 笔，{skipped} 笔账本里本来就有（以前导过、记过的）。")
     },
+    unreadable_times: |n| format!("{n} 笔时间读不懂，没迁，留在压缩包里。"),
     outdated: |n, why, code, upgrade| {
         format!(
             "{n} 笔赞助记录：{why}（{code}），留在压缩包里；{upgrade}以后重跑迁移（重跑不会多出来）。"
@@ -114,6 +117,11 @@ static SPONSORS_EN: Sponsors = Sponsors {
     imported: |n, added, skipped| {
         format!(
             "{n} sponsor record(s): {added} added, {skipped} already in the ledger (imported or recorded before)."
+        )
+    },
+    unreadable_times: |n| {
+        format!(
+            "{n} sponsor record(s) have an unreadable time and were not migrated; they stay in the archive."
         )
     },
     outdated: |n, why, code, upgrade| {
