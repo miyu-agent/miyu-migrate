@@ -114,6 +114,13 @@ pub fn migrate(copy: &Layout, root: &Path, language: Language) -> Moved {
             skills.skipped.push(skip(&shown, "package"));
             continue;
         }
+        if linked_out(&dir) {
+            skills
+                .skipped
+                .push(skip(&relative(&dir.join("SKILL.md")), "link"));
+            notes.push((words.head_linked_out)(&shown));
+            continue;
+        }
         match copy_skill(&dir, &target) {
             Ok(Copied::Present) => {}
             Ok(Copied::As(name, links)) => {
@@ -188,7 +195,8 @@ fn lock(copy: &Layout) -> Vec<(String, Vec<PathBuf>)> {
         .collect()
 }
 
-/// 技能目录：顶层的（人格是 `None`）和人格层的（`Some(scope)`），照路径排。以 `.` 开头的、没有 `SKILL.md` 的不算。
+/// 技能目录：顶层的（人格是 `None`）和人格层的（`Some(scope)`），照路径排。以 `.` 开头的、没有 `SKILL.md` 的不算；`SKILL.md`
+/// 是链接的（悬空的也算）算，迁的时候照 [`linked_out`] 查。
 fn found(dir: &Path) -> Vec<(Option<String>, PathBuf)> {
     let mut all = Vec::new();
     for (owner, parent) in std::iter::once((None, dir.to_path_buf())).chain(
@@ -201,12 +209,32 @@ fn found(dir: &Path) -> Vec<(Option<String>, PathBuf)> {
     ) {
         // 顶层的 `personas/` 是人格层，没有 `SKILL.md`，不当技能。
         for skill in children(&parent) {
-            if skill.join("SKILL.md").is_file() {
+            let head = skill.join("SKILL.md");
+            if head.is_file() || is_link(&head) {
                 all.push((owner.clone(), skill));
             }
         }
     }
     all
+}
+
+/// `SKILL.md` 是链接、却不是技能目录 `dir` 里面的一个文件（指到外面、悬空、经中间链接绕出去、指到目录）：不跟，整个技能不拷
+/// （读外面的内容会把技能目录以外的东西写进新技能）。里外照真实位置按路径组件比，两边都换成真实位置（技能目录本身经链接到达的
+/// 也对），同核心的施工 AU-008。
+fn linked_out(dir: &Path) -> bool {
+    let head = dir.join("SKILL.md");
+    if !is_link(&head) {
+        return false;
+    }
+    match (fs::canonicalize(&head), fs::canonicalize(dir)) {
+        (Ok(real), Ok(home)) => !(real.starts_with(&home) && real.is_file()),
+        _ => true,
+    }
+}
+
+/// `path` 本身是链接（不跟）。
+fn is_link(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
 }
 
 /// `dir` 下不以 `.` 开头的子目录，照名字排。

@@ -16,6 +16,8 @@ pub struct Skills {
     pub disabled: fn(&str) -> String,
     /// 技能里没拷的链接：名字、几个。
     pub links_left: fn(&str, usize) -> String,
+    /// `SKILL.md` 是链到技能外面（悬空、不是文件）的链接，整个技能没拷：原来在哪。
+    pub head_linked_out: fn(&str) -> String,
     /// 有新包的脚本（并起来的）。
     pub ported: fn(&str) -> String,
     /// 新版格式不一样的自己的脚本：几个、给 agent 的那份叫什么。
@@ -79,6 +81,11 @@ static SKILLS_ZH: Skills = Skills {
     links_left: |name, n| {
         format!("技能 `{name}` 里有 {n} 个链接没拷（链接不跟，可能指到技能外面），留在压缩包里。")
     },
+    head_linked_out: |shown| {
+        format!(
+            "`{shown}` 的 SKILL.md 是链接，指到技能目录外面（或者悬空、不是文件），没跟，整个技能没拷，留在压缩包里。"
+        )
+    },
     ported: |listed| format!("有新包的到官方源装：{listed}。"),
     scripts_left: |n, agent| {
         format!(
@@ -109,6 +116,11 @@ static SKILLS_EN: Skills = Skills {
     links_left: |name, n| {
         format!(
             "{n} link(s) in the skill `{name}` were not copied (links are not followed; they may point outside the skill); they stay in the archive."
+        )
+    },
+    head_linked_out: |shown| {
+        format!(
+            "The SKILL.md of `{shown}` is a link that leads outside the skill folder (or is dangling or not a file); it was not followed and the whole skill was not copied; it stays in the archive."
         )
     },
     ported: |listed| {
