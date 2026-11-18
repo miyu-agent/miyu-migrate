@@ -8,7 +8,7 @@ miyu pkg install migrate
 miyu migrate ~/.miyu-0.7
 ```
 
-一步步怎么做、迁了什么、没迁什么、出了问题怎么办，见 [从 0.7 旧版迁过来](https://github.com/miyu-agent/miyu/blob/main/docs/guide/migrate.md)。
+一步步怎么做、迁了什么、没迁什么、出了问题怎么办，见 [从 0.7 旧版迁过来](https://github.com/miyu-agent/miyu/blob/main/docs/zh/guide/migrate.md)。
 
 它先把旧目录整个打成压缩包、逐个文件核对，然后只从解出来的副本读，经新版核心的协议写进去，最后出两份报告：一份给人看，
 一份给 agent 读（写明没迁的东西在压缩包里的哪个路径、旧格式是什么样，要的时候让 agent 接着迁）。旧目录不动。压缩包和报告放在
