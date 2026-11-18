@@ -8,6 +8,8 @@ use serde_json::json;
 
 use super::*;
 
+mod startup;
+
 fn write(path: &Path, bytes: &[u8]) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, bytes).unwrap();
