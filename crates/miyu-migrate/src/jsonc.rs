@@ -7,11 +7,13 @@ pub fn parse(text: &str) -> Option<Value> {
     serde_json::from_str(&strip_comments(text)).ok()
 }
 
-/// JSONC 去掉 `//`、`/* */` 注释和对象、数组末尾多的逗号（字符串里的不动）。
+/// JSONC 去掉 `//`、`/* */` 注释和对象、数组末尾多的逗号（字符串里的不动）。一遍走完：字符串里遇 `\\` 连下一个字一起照抄，
+/// 引号状态不会被转义了的反斜杠带反；串外的 `,` 记下位置，之后（隔着空白、注释）头一个别的字是 `}` 或 `]` 的把它去掉。
 pub fn strip_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     let mut in_string = false;
+    let mut comma: Option<usize> = None;
     while let Some(ch) = chars.next() {
         if in_string {
             out.push(ch);
@@ -23,10 +25,6 @@ pub fn strip_comments(text: &str) -> String {
             continue;
         }
         match (ch, chars.peek()) {
-            ('"', _) => {
-                in_string = true;
-                out.push(ch);
-            }
             ('/', Some('/')) => while chars.next_if(|next| *next != '\n').is_some() {},
             ('/', Some('*')) => {
                 chars.next();
@@ -38,31 +36,21 @@ pub fn strip_comments(text: &str) -> String {
                     last = next;
                 }
             }
-            _ => out.push(ch),
-        }
-    }
-    // 末尾多的逗号：`,` 后面跟着（隔着空白）`}` 或 `]` 的去掉。
-    let mut cleaned = String::with_capacity(out.len());
-    let bytes: Vec<char> = out.chars().collect();
-    let mut in_string = false;
-    for (n, ch) in bytes.iter().enumerate() {
-        if in_string {
-            if *ch == '"' && (n == 0 || bytes[n - 1] != '\\') {
-                in_string = false;
-            }
-            cleaned.push(*ch);
-            continue;
-        }
-        if *ch == '"' {
-            in_string = true;
-        }
-        if *ch == ',' {
-            let next = bytes[n + 1..].iter().find(|c| !c.is_whitespace());
-            if matches!(next, Some('}' | ']')) {
-                continue;
+            _ if ch.is_whitespace() => out.push(ch),
+            _ => {
+                if let Some(at) = comma.take()
+                    && matches!(ch, '}' | ']')
+                {
+                    out.remove(at);
+                }
+                if ch == ',' {
+                    comma = Some(out.len());
+                } else if ch == '"' {
+                    in_string = true;
+                }
+                out.push(ch);
             }
         }
-        cleaned.push(*ch);
     }
-    cleaned
+    out
 }
