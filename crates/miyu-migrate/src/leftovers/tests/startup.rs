@@ -317,3 +317,48 @@ fn both_reports_show_the_lines() {
     );
     println!("{human}\n{agent}");
 }
+
+/// 一段是一个结尾记号和它前面最近的那个开头记号之间（同终端 install 实际删的）：开着又遇到开头的，前一个开头算只有开头、
+/// 不算一段，从新的开头重新算；孤立的结尾不算。
+#[test]
+fn a_block_starts_at_the_nearest_begin_before_its_end() {
+    let home = tempfile::tempdir().unwrap();
+    let begin = "# >>> miyu bash hook >>>\n";
+    let end = "# <<< miyu bash hook <<<\n";
+    write(
+        &home.path().join(".bashrc"),
+        format!("{begin}export PATH=$PATH:~/bin\n{begin}source /x\n{end}").as_bytes(),
+    );
+    write(
+        &home.path().join(".bash_profile"),
+        format!("{begin}{begin}source /x\n{end}{begin}a=1\n").as_bytes(),
+    );
+    write(
+        &home.path().join(".profile"),
+        format!("{end}a=1\n{begin}source /x\n{end}{end}").as_bytes(),
+    );
+    write(
+        &home.path().join(".bash_login"),
+        format!("a=1\n{end}").as_bytes(),
+    );
+    let listed = outside_items(home.path(), None, Language::Zh);
+    let bashrc = note(find(&listed, "outside/.bashrc"));
+    assert!(
+        bashrc.contains("第 3～5 行") && !bashrc.contains("第 1～"),
+        "{bashrc}"
+    );
+    let profile = note(find(&listed, "outside/.bash_profile"));
+    assert!(
+        profile.contains("第 2～4 行") && !profile.contains("第 1～") && !profile.contains("、"),
+        "{profile}"
+    );
+    let plain = note(find(&listed, "outside/.profile"));
+    assert!(
+        plain.contains("第 3～5 行") && !plain.contains("、"),
+        "{plain}"
+    );
+    assert!(
+        !listed.iter().any(|item| item.what == "outside/.bash_login"),
+        "{listed:?}"
+    );
+}
