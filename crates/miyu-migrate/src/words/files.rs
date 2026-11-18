@@ -28,6 +28,8 @@ pub struct Knowledge {
     pub target: fn(&str) -> String,
     /// 旧根里没有。
     pub none: &'static str,
+    /// 清单在、读不了：系统的原话。
+    pub unreadable: fn(&str) -> String,
     /// 只有内置的默认库：几篇。
     pub builtin_only: fn(usize) -> String,
     /// 新建的库叫什么。
@@ -82,6 +84,9 @@ static KNOWLEDGE_ZH: Knowledge = Knowledge {
     format: "data/kb/files/ 下放原文；kb_meta.db 的 files（name 相对 files/、path 旧绝对路径、size_bytes、mtime、content_sha256）是清单；semantic_index.db 切块和向量（新版自己重建）；default-kb/ 开头的是旧版内置的默认库",
     target: |base| format!("root/kb/{base}/（kb.create）"),
     none: "旧根里没有知识库。",
+    unreadable: |error| {
+        format!("知识库的清单 kb_meta.db 读不了（{error}），文档没迁，留在压缩包里。")
+    },
     builtin_only: |n| format!("旧版只有内置的默认库（{n} 篇，新版不迁）。"),
     name: "旧版知识库",
     description: "从旧版 Miyu 迁过来的文档",
@@ -103,6 +108,11 @@ static KNOWLEDGE_EN: Knowledge = Knowledge {
     format: "originals under data/kb/files/; files in kb_meta.db (name relative to files/, path the old absolute path, size_bytes, mtime, content_sha256) is the list; semantic_index.db holds chunks and vectors (rebuilt by the new version); names starting with default-kb/ are the old built-in default knowledge base",
     target: |base| format!("root/kb/{base}/ (kb.create)"),
     none: "No knowledge base in the old root.",
+    unreadable: |error| {
+        format!(
+            "Cannot read the knowledge base list kb_meta.db ({error}); the documents were not migrated and stay in the archive."
+        )
+    },
     builtin_only: |n| {
         format!(
             "The old version only had the built-in default knowledge base ({n} document(s), not migrated)."

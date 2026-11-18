@@ -36,6 +36,8 @@ pub struct Cli {
     pub cannot_read: fn(&Path, &str) -> String,
     /// 解出来的和打进去的对不上：几个。
     pub mismatch: fn(usize) -> String,
+    /// 出错以后状态目录里解出来的副本删不掉：在哪、系统的原话。
+    pub scratch_left: fn(&Path, &str) -> String,
 }
 
 static ZH: Cli = Cli {
@@ -74,6 +76,12 @@ static ZH: Cli = Cli {
     bad_admin: |name| format!("家目录布局标记里的用户名无效：{name:?}"),
     cannot_read: |path, error| format!("无法读取 {}：{error}", path.display()),
     mismatch: |n| format!("解包后有 {n} 个文件与打包时不符"),
+    scratch_left: |path, error| {
+        format!(
+            "无法删除解包出来的旧数据副本 {}（{error}）；里面有旧配置里的明文 Key，请手动删除",
+            path.display()
+        )
+    },
 };
 
 static EN: Cli = Cli {
@@ -119,6 +127,12 @@ only after you have checked it.
     bad_admin: |name| format!("the home layout marker names an invalid user: {name:?}"),
     cannot_read: |path, error| format!("cannot read {}: {error}", path.display()),
     mismatch: |n| format!("{n} file(s) differ after unpacking"),
+    scratch_left: |path, error| {
+        format!(
+            "cannot remove the unpacked copy of the old data {} ({error}); it holds plain-text keys from the old config, delete it by hand",
+            path.display()
+        )
+    },
 };
 
 /// 照语言挑终端上的字。

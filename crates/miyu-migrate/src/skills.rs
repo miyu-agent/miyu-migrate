@@ -303,7 +303,12 @@ pub fn rename(text: &str, name: &str) -> String {
     else {
         return text.to_string();
     };
-    let Some(end) = rest.find("\n---") else {
+    // 头的结尾是整行的 `---`（后面是换行、`\r\n` 或者文件结尾）；`---foo` 这样的行是头里的内容。
+    let Some(end) = rest.match_indices('\n').map(|(at, _)| at).find(|at| {
+        let after = &rest[at + 1..];
+        let line = after.split_once('\n').map_or(after, |(line, _)| line);
+        line.strip_suffix('\r').unwrap_or(line) == "---"
+    }) else {
         return text.to_string();
     };
     let (head, body) = rest.split_at(end);

@@ -151,6 +151,10 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         .map_err(|error| RunError::Io(listed.clone(), io::Error::other(error)))?;
     fs::write(&listed, text + "\n").map_err(|error| RunError::Io(listed.clone(), error))?;
     let scratch = plan.state.join(stamp(plan.at));
+    let guard = Scratch {
+        path: Some(scratch.clone()),
+        language: plan.language,
+    };
     fs::create_dir_all(&scratch).map_err(|error| RunError::Io(scratch.clone(), error))?;
     let work = scratch.join("work");
     archive::unpack_and_check(&packed, &manifest, &work).map_err(RunError::Archive)?;
@@ -254,8 +258,43 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         .write(&dir, plan.language)
         .map_err(|error| RunError::Io(dir.clone(), error))?;
     // 中间产物（解出来的副本、暂存）用完就删：留给人的在数据根里。
-    fs::remove_dir_all(&scratch).map_err(|error| RunError::Io(scratch.clone(), error))?;
+    guard.finish()?;
     Ok(Done { human, agent })
+}
+
+/// 状态目录里这一次的中间产物（解出来的整份旧根，`config/config.jsonc` 里有明文 Key）：走完照常 [`Scratch::finish`] 删，删不了的报错；
+/// 中途 `?` 返回、panic 的，出作用域时删，删不了的在终端上说一句（这时已经在交回别的错了）。
+struct Scratch {
+    /// 还没删的是 `Some`。
+    path: Option<PathBuf>,
+    /// 删不了时说的话用哪种语言。
+    language: Language,
+}
+
+impl Scratch {
+    /// 用完了：删掉。
+    fn finish(mut self) -> Result<(), RunError> {
+        match self.path.take() {
+            Some(path) => fs::remove_dir_all(&path).map_err(|error| RunError::Io(path, error)),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let Some(path) = self.path.take() else {
+            return;
+        };
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!(
+                "miyu migrate: {}",
+                (crate::words::cli::words(self.language).scratch_left)(&path, &error.to_string())
+            ),
+        }
+    }
 }
 
 /// 人格这一类、只报不迁的几样（细则第六节）。

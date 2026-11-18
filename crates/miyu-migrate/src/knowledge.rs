@@ -51,11 +51,17 @@ pub fn migrate(
         target: Some((words.target)(BASE)),
         note: None,
     };
+    // 没有清单、清单里没有 `files` 表才是「没有」；清单在却读不了的写原因，文档留在压缩包里。
     let files = match listed(&dir.join("kb_meta.db")) {
-        Ok(files) => files,
-        Err(_) => {
+        Ok(Some(files)) => files,
+        Ok(None) => {
             item.status = Status::Skipped;
             item.note = Some(words.none.to_string());
+            return Ok(item);
+        }
+        Err(error) => {
+            item.status = Status::Archived;
+            item.note = Some((words.unreadable)(&error.to_string()));
             return Ok(item);
         }
     };
@@ -161,12 +167,22 @@ pub fn migrate(
     Ok(item)
 }
 
-/// `kb_meta.db` 的 `files`：(`name`, `content_sha256`)，照 `name` 排。
-fn listed(path: &Path) -> rusqlite::Result<Vec<(String, String)>> {
+/// `kb_meta.db` 的 `files`：(`name`, `content_sha256`)，照 `name` 排。没有这个库、库里没有这张表的是 `None`。
+///
+/// # Errors
+///
+/// 库在，打不开、读不了。
+fn listed(path: &Path) -> rusqlite::Result<Option<Vec<(String, String)>>> {
     if !path.is_file() {
-        return Err(rusqlite::Error::InvalidPath(path.to_path_buf()));
+        return Ok(None);
     }
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    let exists = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'files'")?
+        .exists([])?;
+    if !exists {
+        return Ok(None);
+    }
     let mut statement = conn.prepare("SELECT name, content_sha256 FROM files ORDER BY name")?;
     let rows = statement.query_map([], |row| {
         Ok((
@@ -174,7 +190,7 @@ fn listed(path: &Path) -> rusqlite::Result<Vec<(String, String)>> {
             row.get::<_, Option<String>>(1)?.unwrap_or_default(),
         ))
     })?;
-    rows.collect()
+    rows.collect::<rusqlite::Result<_>>().map(Some)
 }
 
 /// 拷完是什么样。
