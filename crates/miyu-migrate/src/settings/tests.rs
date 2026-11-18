@@ -191,3 +191,62 @@ fn a_price_with_both_cache_names_is_written_once() {
         .collect();
     assert_eq!(cache, vec![&json!(0.1)], "新写法 cache_read 为准");
 }
+
+/// 审计 #142：`new_id` 把非 ASCII 一律换成 `-`，等长的中文供应商名都成了 `p---`：两家的设置写到同一个键下、两个密钥同名，
+/// 后写的那家的 Key 盖掉前一家，两家都坏。旧版的中文编号是合法配置。
+#[test]
+fn audit_142_two_chinese_provider_ids_keep_their_own_keys() {
+    let old = json!({
+        "providers": [
+            {"id": "智谱", "base_url": "https://zhipu.example/v1", "api_key": "key-zhipu"},
+            {"id": "百炼", "base_url": "https://bailian.example/v1", "api_key": "key-bailian"},
+        ]
+    });
+    let planned = plan(&old, None, &BTreeSet::new());
+    let names: BTreeSet<&str> = planned
+        .secrets
+        .iter()
+        .map(|one| one.name.as_str())
+        .collect();
+    assert_eq!(
+        names.len(),
+        planned.secrets.len(),
+        "密钥名撞了：{:?}",
+        planned.secrets
+    );
+    for (url, key) in [
+        ("https://zhipu.example/v1", "key-zhipu"),
+        ("https://bailian.example/v1", "key-bailian"),
+    ] {
+        let base = planned
+            .changes
+            .iter()
+            .find(|one| one.value == json!(url))
+            .and_then(|one| one.key.strip_suffix(".base_url"))
+            .unwrap_or_else(|| panic!("{url} 没写进去：{:?}", planned.changes));
+        let secret = planned
+            .changes
+            .iter()
+            .rfind(|one| one.key == format!("{base}.key"))
+            .and_then(|one| one.value["secret"].as_str())
+            .unwrap_or_else(|| panic!("{base} 没有 key"));
+        let value = planned
+            .secrets
+            .iter()
+            .rfind(|one| one.name == secret)
+            .map(|one| one.value.as_str());
+        assert_eq!(value, Some(key), "{base}（{url}）的 key 被别家的盖了");
+    }
+}
+
+/// 审计 #142：`segment` 带引号时只转义 `\` 和 `"`，换行、回车、制表这些控制字符原样放进 TOML 的引号键里，键写不进去。
+#[test]
+fn audit_142_control_characters_in_a_key_segment_are_escaped() {
+    assert_eq!(segment("a\nb"), r#""a\nb""#);
+    assert_eq!(segment("a\tb\rc"), r#""a\tb\rc""#);
+    assert!(
+        !segment("x\u{1}y").chars().any(char::is_control),
+        "{:?}",
+        segment("x\u{1}y")
+    );
+}
