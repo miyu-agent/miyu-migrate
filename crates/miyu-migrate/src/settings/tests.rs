@@ -250,3 +250,29 @@ fn audit_142_control_characters_in_a_key_segment_are_escaped() {
         segment("x\u{1}y")
     );
 }
+
+/// 中文编号的新编号每次一样、合新版的写法；两个旧编号还是换成了同一个的，后一家加 `-2`。
+#[test]
+fn chinese_ids_are_stable_and_colliding_ids_get_a_number() {
+    let zhipu = new_id("智谱");
+    assert_eq!(zhipu, new_id(" 智谱 "), "同一个旧编号每次一样");
+    assert_ne!(zhipu, new_id("百炼"));
+    assert!(zhipu.len() <= 32 && zhipu.starts_with(|ch: char| ch.is_ascii_lowercase()));
+    assert!(new_id("智谱AI").starts_with("ai-"), "{}", new_id("智谱AI"));
+    let long = new_id(&format!("{}智", "x".repeat(40)));
+    assert!(long.len() <= 32, "截短了也留着后面那段：{long}");
+    assert_ne!(long, new_id(&"x".repeat(40)));
+    let old = json!({
+        "providers": [
+            {"id": "my relay", "base_url": "https://a.example/v1"},
+            {"id": "my-relay", "base_url": "https://b.example/v1"},
+        ]
+    });
+    let planned = plan(&old, None, &BTreeSet::new());
+    let bases: Vec<&str> = planned
+        .changes
+        .iter()
+        .filter_map(|one| one.key.strip_suffix(".base_url"))
+        .collect();
+    assert_eq!(bases, vec!["providers.my-relay", "providers.my-relay-2"]);
+}

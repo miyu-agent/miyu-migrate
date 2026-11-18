@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
+use super::names::{distinct, new_id, segment};
+
 /// 旧版的供应商模板：没填 key（或者模型）的不转。
 const TEMPLATES: &[&str] = &[
     "opencode",
@@ -210,7 +212,7 @@ fn providers(
         if TEMPLATES.contains(&old_id) && !filled_key && (old_id == "opencode" || !has_models) {
             continue;
         }
-        let id = new_id(old_id);
+        let id = distinct(new_id(old_id), old_id, &ids);
         if id != old_id {
             planned.renamed.push((old_id.to_string(), id.clone()));
         }
@@ -421,38 +423,5 @@ fn change(key: &str, value: Value) -> Change {
     Change {
         key: key.to_string(),
         value,
-    }
-}
-
-/// 新版供应商编号的写法（小写字母开头，小写字母、数字、`-`、`_`，最长 32 个字）：照不上的换成能用的。
-pub fn new_id(old: &str) -> String {
-    let mut id: String = old
-        .trim()
-        .chars()
-        .map(|ch| {
-            let ch = ch.to_ascii_lowercase();
-            if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_' {
-                ch
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    if !id.starts_with(|ch: char| ch.is_ascii_lowercase()) {
-        id.insert_str(0, "p-");
-    }
-    id.chars().take(32).collect()
-}
-
-/// 键里人起的一段：只有字母、数字、`-`、`_` 的照写，别的带双引号（照 TOML 转义）。
-pub fn segment(name: &str) -> String {
-    if !name.is_empty()
-        && name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-    {
-        name.to_string()
-    } else {
-        format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
     }
 }

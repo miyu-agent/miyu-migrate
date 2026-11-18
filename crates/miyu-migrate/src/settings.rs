@@ -6,6 +6,7 @@
 //! - 写完 `config.get` 读回比一遍，对不上的数出来。
 //! - 新版已经有同编号的供应商整家跳过；旧版的 CLI 中转、新版没有对应的整段只报。
 
+mod names;
 mod plan;
 
 use std::collections::BTreeSet;
@@ -17,7 +18,8 @@ use crate::layout::Layout;
 use crate::report::{Item, Skip, Status};
 use crate::words::Language;
 
-pub use plan::{Change, Planned, Secret, new_id, plan, segment};
+pub use names::{new_id, segment};
+pub use plan::{Change, Planned, Secret, plan};
 
 /// 迁配置：读 `copy` 的旧配置和属主档案，写进 `core`。交回报告的一项（只有名字和条数）。
 ///
