@@ -171,3 +171,37 @@ fn audit_143_a_line_starting_with_dashes_inside_the_header_is_not_its_end() {
         "正文原样：{renamed:?}"
     );
 }
+
+/// 审计 #143：技能里的链接（指到文件的、悬空的）拷的时候不跟、也不拷，原来报告里一个字都没有，主人以为整个技能都过去了。
+/// 照旧不跟（可能指到技能目录外面），报告写哪个技能里有几个链接没拷。
+#[cfg(unix)]
+#[test]
+fn audit_143_links_inside_a_skill_are_reported_not_dropped_silently() {
+    let (old, layout) = old_root();
+    let linked = old.path().join("extensions/skills/linked");
+    write(&linked.join("SKILL.md"), &skill("linked"));
+    write(&linked.join("a.md"), "正文");
+    std::os::unix::fs::symlink(linked.join("a.md"), linked.join("alias.md")).unwrap();
+    std::os::unix::fs::symlink("/nowhere/at/all", linked.join("gone.md")).unwrap();
+    for (language, said) in [
+        (Language::Zh, "`linked` 里有 2 个链接没拷"),
+        (
+            Language::En,
+            "2 link(s) in the skill `linked` were not copied",
+        ),
+    ] {
+        let new = tempfile::tempdir().unwrap();
+        let moved = migrate(&layout, new.path(), language);
+        let copied = new.path().join("root/skills/linked");
+        assert_eq!(fs::read_to_string(copied.join("a.md")).unwrap(), "正文");
+        for name in ["alias.md", "gone.md"] {
+            assert!(
+                fs::symlink_metadata(copied.join(name)).is_err(),
+                "链接不跟、不拷：{name}"
+            );
+        }
+        assert_eq!(moved.skills.status, Status::Partial, "{:?}", moved.skills);
+        let note = moved.skills.note.unwrap_or_default();
+        assert!(note.contains(said), "{language:?}：{note}");
+    }
+}
