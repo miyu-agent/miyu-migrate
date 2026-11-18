@@ -212,3 +212,40 @@ fn no_records_no_questions() {
     assert_eq!(item.status, Status::Skipped);
     assert!(core.calls.is_empty());
 }
+
+/// 审计 #140：读会话库出错（坏了、读不了）也被外层 `_ =>` 吞成「旧版没有赞助记录」，主人察觉不到账本没迁。读不了要写原因，
+/// 不能报成没有。
+#[test]
+fn audit_140_a_broken_conversation_database_is_not_reported_as_no_records() {
+    let (dir, layout) = old_root(2);
+    std::fs::write(
+        dir.path().join("home/owner/conversation.db"),
+        b"this is not a sqlite database at all, just garbage bytes ".repeat(64),
+    )
+    .unwrap();
+    assert!(read(&layout.conversation_db()).is_err(), "坏库读不了");
+    let mut core = Fake {
+        installed: true,
+        answer: Ok(json!({"added": 0, "skipped": 0})),
+        calls: Vec::new(),
+    };
+    let item = migrate(&mut core, &layout, Language::Zh).unwrap();
+    let none = crate::words::setup::sponsors(Language::Zh).none;
+    assert_ne!(item.status, Status::Skipped, "读不了不是「没有」：{item:?}");
+    assert_ne!(item.note.as_deref(), Some(none), "报告不能写「{none}」");
+}
+
+/// 审计 #140：旧版外币没给折算时写 `cny_minor = 0, fx_rate = 0`；迁过去写成 `converted: 0`，赞助插件当作 0 元计进合计，
+/// 而不是「未换算」。应写 null。
+#[test]
+fn audit_140_an_unconverted_foreign_amount_is_not_zero_yuan() {
+    let mut unconverted = row();
+    unconverted.currency = "USD".to_string();
+    unconverted.converted = 0;
+    unconverted.rate = 0.0;
+    let entry = entry(&unconverted);
+    assert!(
+        entry["converted"].is_null(),
+        "没折算的外币应写 null，不是 0 元：{entry}"
+    );
+}
