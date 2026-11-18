@@ -74,6 +74,8 @@ pub struct Leftovers {
     pub outside_format: &'static str,
     /// 旧版 fish 终端集成的那份：新版 `install` 会备份后清掉。
     pub outside_fish: &'static str,
+    /// 旧版 fish 终端集成的那份是悬空的链接（原来指到哪）：新版 `install` 只删链接。
+    pub outside_fish_dangling: fn(&str) -> String,
     /// 启动文件里旧版终端集成那一段是什么（哪种 shell）。
     pub hook_format: fn(&str) -> String,
     /// 启动文件里旧版那几段：哪种 shell、每段的开头行和结尾行（从 1 数）。
@@ -120,6 +122,11 @@ static ZH: Leftovers = Leftovers {
     outside_old: "旧版装过这个，确认是旧版的、用不着了再删；删不删由你定。",
     outside_format: "数据根外面的文件，不在压缩包里",
     outside_fish: "旧版的 fish 终端集成，迁移不动它；在新版里跑 `miyu shellhook install --shell fish` 时，认得出是旧版的会先备份再清掉，不用终端集成的可以自己删。",
+    outside_fish_dangling: |target| {
+        format!(
+            "这是旧版 fish 终端集成留下的链接，原来指到 `{target}`，那里已经不在了；在新版里跑 `miyu shellhook install --shell fish` 时会删掉这个链接，不用终端集成的可以自己删。"
+        )
+    },
     hook_format: |shell| {
         format!(
             "启动文件里旧版终端集成写的一段：从独占一行的 `# >>> miyu {shell} hook >>>` 到 `# <<< miyu {shell} hook <<<`，中间一行 source 旧数据根里的 hook 脚本；数据根外面的文件，不在压缩包里"
@@ -189,6 +196,11 @@ static EN: Leftovers = Leftovers {
     outside_old: "The old version installed this. Delete it once you are sure it is the old one and no longer needed; that is up to you.",
     outside_format: "a file outside the data root, not in the archive",
     outside_fish: "The old fish terminal integration. Migration leaves it alone; running `miyu shellhook install --shell fish` in the new version backs it up and removes it if it is recognized as the old one. If you do not use the terminal integration, you can delete it yourself.",
+    outside_fish_dangling: |target| {
+        format!(
+            "A link left by the old fish terminal integration. It pointed to `{target}`, which no longer exists. Running `miyu shellhook install --shell fish` in the new version deletes this link. If you do not use the terminal integration, you can delete it yourself."
+        )
+    },
     hook_format: |shell| {
         format!(
             "a block written into a shell startup file by the old terminal integration: from a line that is just `# >>> miyu {shell} hook >>>` to `# <<< miyu {shell} hook <<<`, with a line in between that sources the hook script in the old data root; a file outside the data root, not in the archive"

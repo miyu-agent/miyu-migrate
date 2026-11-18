@@ -408,16 +408,29 @@ fn outside(home: &Home, words: &Leftovers) -> Vec<Item> {
             } else {
                 home.dir.join(path)
             };
-            if !full.exists() {
+            // fish 那份名字在就算（悬空的链接也报：旧数据根挪走以后剩下的，新版 install 会删掉它）；别的照旧跟着链接看。
+            let fish = *path == OLD_FISH;
+            let there = if fish {
+                fs::symlink_metadata(&full).is_ok()
+            } else {
+                full.exists()
+            };
+            if !there {
                 return None;
             }
             let newer = *path == ".local/bin/miyu" && is_new_miyu(&home.dir, &full);
             let note = if newer {
-                words.outside_new
-            } else if *path == OLD_FISH {
-                words.outside_fish
+                words.outside_new.to_string()
+            } else if let Some(target) = (fish && !full.exists())
+                .then(|| fs::read_link(&full))
+                .and_then(Result::ok)
+            {
+                // 名字在、跟过去却不在的：悬空的链接，写原来指到哪。
+                (words.outside_fish_dangling)(&target.display().to_string())
+            } else if fish {
+                words.outside_fish.to_string()
             } else {
-                words.outside_old
+                words.outside_old.to_string()
             };
             let base = home.config.as_deref().unwrap_or(&home.dir);
             let (what, source) = startup::named(&home.dir, &full, "XDG_CONFIG_HOME", base);
@@ -429,7 +442,7 @@ fn outside(home: &Home, words: &Leftovers) -> Vec<Item> {
                 migrated: 0,
                 skipped: Vec::new(),
                 target: None,
-                note: Some(note.to_string()),
+                note: Some(note),
             })
         })
         .collect()

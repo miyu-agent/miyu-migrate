@@ -69,7 +69,7 @@ miyu migrate ~/.miyu-0.7
 - **没迁的**：用量、上键历史、QQ 的图片、好感度这类插件数据、记忆的日记和旧向量、定时提醒这些留在压缩包里，报告逐样写在哪、什么格式，
   要的时候让 agent 照 `给agent.json` 接着迁；派生的缓存新版自己重建；数据根外面旧版装过的只报在不在（`~/.local/bin/miyu` 是新版的——
   安装脚本链到 `~/.local/lib/miyu/` 的，或者写着 miyu-remake 的包装脚本——照实说别删；旧版 fish 那份照 `$XDG_CONFIG_HOME/fish/conf.d/miyu.fish`
-  找，没设的是 `~/.config/fish/conf.d/miyu.fish`）；旧版终端集成写进 bash、zsh 启动文件
+  找，没设的是 `~/.config/fish/conf.d/miyu.fish`；是指到已经不在的地方的链接也报，写原来指到哪）；旧版终端集成写进 bash、zsh 启动文件
   （`~/.bashrc`、`~/.bash_profile`、`~/.bash_login`、`~/.profile`、`~/.zshrc`、`$ZDOTDIR/.zshrc`）的那一段，报告写哪个文件第几行到
   第几行，迁移只报不改，在新版里跑 `miyu shellhook install` 装上这种 shell 的集成时会先备份再删掉它（fish 的那份同样）。报告最后一节写压缩包在哪、什么时候
   可以删旧目录（删由你自己来）。
