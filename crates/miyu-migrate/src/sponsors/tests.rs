@@ -249,3 +249,71 @@ fn audit_140_an_unconverted_foreign_amount_is_not_zero_yuan() {
         "没折算的外币应写 null，不是 0 元：{entry}"
     );
 }
+
+/// 往 `layout` 的会话库里加几笔，时刻照 `times` 写。
+fn add_with_times(layout: &Layout, times: &[&str]) {
+    let conn = Connection::open(layout.conversation_db()).unwrap();
+    for at in times {
+        conn.execute(
+            "INSERT INTO sponsor_records (platform, sponsor_id, sponsor_name, amount_minor, currency, cny_minor, sponsored_at, created_at, updated_at)
+             VALUES ('onebot', '20000', '某人', 500, 'CNY', 500, ?1, '', '')",
+            params![at],
+        )
+        .unwrap();
+    }
+}
+
+/// 审计 #140：`sponsored_at` 读不懂的一笔原来写成 `at: 0`，赞助插件见 `at` 不大于 0 整份拒收，一笔坏、整本账不导。
+/// 无时区的 `YYYY-MM-DD HH:MM:SS` 当 UTC 读；还是读不懂的只跳过那一笔、报告里写几笔，别的照导。
+#[test]
+fn audit_140_an_unreadable_time_skips_only_that_record() {
+    let (_dir, layout) = old_root(1);
+    add_with_times(&layout, &["2026-09-25 07:00:00", "下午三点"]);
+    for (language, said) in [
+        (Language::Zh, "1 笔时间读不懂"),
+        (Language::En, "unreadable time"),
+    ] {
+        let mut core = Fake {
+            installed: true,
+            answer: Ok(json!({"added": 2, "skipped": 0})),
+            calls: Vec::new(),
+        };
+        let item = migrate(&mut core, &layout, language).unwrap();
+        let (_, params) = &core.calls[1];
+        let at: Vec<&Value> = params["params"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|one| &one["at"])
+            .collect();
+        assert_eq!(
+            at,
+            [&json!(1_790_319_600_000i64), &json!(1_790_319_600_000i64)],
+            "好的、空格格式的照导，读不懂的不送"
+        );
+        assert_eq!(item.status, Status::Partial, "{item:?}");
+        let note = item.note.unwrap_or_default();
+        assert!(note.contains(said), "{language:?}：{note}");
+    }
+
+    let (_dir, only_bad) = old_root(0);
+    add_with_times(&only_bad, &["not a time"]);
+    let mut core = Fake {
+        installed: true,
+        answer: Ok(json!({"added": 0, "skipped": 0})),
+        calls: Vec::new(),
+    };
+    let item = migrate(&mut core, &only_bad, Language::Zh).unwrap();
+    assert_ne!(
+        item.status,
+        Status::Skipped,
+        "有一笔，不是「没有」：{item:?}"
+    );
+    assert!(
+        item.note
+            .as_deref()
+            .unwrap_or_default()
+            .contains("1 笔时间读不懂"),
+        "{item:?}"
+    );
+}
