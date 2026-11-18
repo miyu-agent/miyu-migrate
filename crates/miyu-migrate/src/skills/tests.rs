@@ -205,3 +205,143 @@ fn audit_143_links_inside_a_skill_are_reported_not_dropped_silently() {
         assert!(note.contains(said), "{language:?}：{note}");
     }
 }
+
+/// 新数据根里迁出来的文件有没有一个含 `marker`。
+#[cfg(unix)]
+fn any_file_contains(root: &Path, marker: &str) -> bool {
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .any(|entry| fs::read_to_string(entry.path()).is_ok_and(|text| text.contains(marker)))
+}
+
+/// `SKILL.md` 本身是链接的技能：迁一遍，交回结果和新数据根。
+#[cfg(unix)]
+fn migrate_with_linked_head(
+    make: impl Fn(&Path, &Path),
+    language: Language,
+) -> (Moved, tempfile::TempDir) {
+    let (old, layout) = old_root();
+    let outside = tempfile::tempdir().unwrap();
+    let dir = old.path().join("extensions/skills/linked");
+    fs::create_dir_all(&dir).unwrap();
+    make(&dir, outside.path());
+    let new = tempfile::tempdir().unwrap();
+    let moved = migrate(&layout, new.path(), language);
+    (moved, new)
+}
+
+/// 技能这一项里 why = link 的那几条的键。
+#[cfg(unix)]
+fn link_skips(moved: &Moved) -> Vec<&str> {
+    moved
+        .skills
+        .skipped
+        .iter()
+        .filter(|one| one.why == "link")
+        .map(|one| one.key.as_str())
+        .collect()
+}
+
+/// 审计收尾（同核心 AU-008）：`SKILL.md` 是指到技能目录外面一个文件的链接，原来照读，外面的内容写进了新技能。
+/// 不跟、整个技能不拷，记一条 link、这一项是 Partial、报告写清楚。
+#[cfg(unix)]
+#[test]
+fn a_skill_file_linked_outside_the_skill_is_not_followed() {
+    const MARKER: &str = "OUTSIDE-MARKER-5c1e";
+    let make = |dir: &Path, outside: &Path| {
+        write(
+            &outside.join("secret.md"),
+            &format!("---\nname: linked\n---\n{MARKER}\n"),
+        );
+        std::os::unix::fs::symlink(outside.join("secret.md"), dir.join("SKILL.md")).unwrap();
+    };
+    for (language, said) in [
+        (
+            Language::Zh,
+            "`extensions/skills/linked` 的 SKILL.md 是链接",
+        ),
+        (
+            Language::En,
+            "The SKILL.md of `extensions/skills/linked` is a link",
+        ),
+    ] {
+        let (moved, new) = migrate_with_linked_head(make, language);
+        assert!(
+            !any_file_contains(new.path(), MARKER),
+            "外面的内容进了新技能"
+        );
+        assert!(
+            !new.path().join("root/skills/linked").exists(),
+            "整个技能不拷"
+        );
+        assert_eq!(moved.skills.status, Status::Partial, "{:?}", moved.skills);
+        assert_eq!(link_skips(&moved), ["extensions/skills/linked/SKILL.md"]);
+        let note = moved.skills.note.unwrap_or_default();
+        assert!(note.contains(said), "{language:?}：{note}");
+    }
+}
+
+/// `SKILL.md` 链到技能目录里面的 `docs/real.md`、技能目录本身也是链接过去的：照常迁，内容对。
+#[cfg(unix)]
+#[test]
+fn a_skill_file_linked_inside_the_skill_is_read_as_before() {
+    let (old, layout) = old_root();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let real_dir = elsewhere.path().join("inlink");
+    write(&real_dir.join("docs/real.md"), &skill("inlink"));
+    std::os::unix::fs::symlink("docs/real.md", real_dir.join("SKILL.md")).unwrap();
+    std::os::unix::fs::symlink(&real_dir, old.path().join("extensions/skills/inlink")).unwrap();
+    let new = tempfile::tempdir().unwrap();
+    let moved = migrate(&layout, new.path(), Language::Zh);
+    let copied = new.path().join("root/skills/inlink");
+    assert_eq!(
+        fs::read_to_string(copied.join("SKILL.md")).unwrap(),
+        skill("inlink")
+    );
+    assert_eq!(
+        fs::read_to_string(copied.join("docs/real.md")).unwrap(),
+        skill("inlink")
+    );
+    assert_eq!(moved.skills.status, Status::Migrated, "{:?}", moved.skills);
+    assert!(link_skips(&moved).is_empty(), "{:?}", moved.skills);
+}
+
+/// `SKILL.md` 是悬空链接：不 panic，不报成都迁了。
+#[cfg(unix)]
+#[test]
+fn a_dangling_skill_file_is_reported() {
+    let (moved, new) = migrate_with_linked_head(
+        |dir, _| std::os::unix::fs::symlink("/nowhere/at/all", dir.join("SKILL.md")).unwrap(),
+        Language::Zh,
+    );
+    assert!(!new.path().join("root/skills/linked").exists());
+    assert_eq!(moved.skills.status, Status::Partial, "{:?}", moved.skills);
+    assert_eq!(link_skips(&moved), ["extensions/skills/linked/SKILL.md"]);
+}
+
+/// 经中间链接绕出去的：`SKILL.md` → `inner/link.md`，`inner` 是指到技能外面目录的链接。不跟。
+#[cfg(unix)]
+#[test]
+fn a_skill_file_that_leaves_through_an_inner_link_is_not_followed() {
+    const MARKER: &str = "DETOUR-MARKER-91b2";
+    let (moved, new) = migrate_with_linked_head(
+        |dir, outside| {
+            write(
+                &outside.join("link.md"),
+                &format!("---\nname: linked\n---\n{MARKER}\n"),
+            );
+            std::os::unix::fs::symlink(outside, dir.join("inner")).unwrap();
+            std::os::unix::fs::symlink("inner/link.md", dir.join("SKILL.md")).unwrap();
+        },
+        Language::Zh,
+    );
+    assert!(
+        !any_file_contains(new.path(), MARKER),
+        "绕出去的内容进了新技能"
+    );
+    assert!(!new.path().join("root/skills/linked").exists());
+    assert_eq!(moved.skills.status, Status::Partial, "{:?}", moved.skills);
+    assert_eq!(link_skips(&moved), ["extensions/skills/linked/SKILL.md"]);
+}
