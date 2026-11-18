@@ -14,6 +14,8 @@ pub struct Skills {
     pub persona_owned: fn(&str, &str) -> String,
     /// 原来停用了的：名字。
     pub disabled: fn(&str) -> String,
+    /// 技能里没拷的链接：名字、几个。
+    pub links_left: fn(&str, usize) -> String,
     /// 有新包的脚本（并起来的）。
     pub ported: fn(&str) -> String,
     /// 新版格式不一样的自己的脚本：几个、给 agent 的那份叫什么。
@@ -74,6 +76,9 @@ static SKILLS_ZH: Skills = Skills {
         format!("`{name}` 原来是人格 `{scope}` 的（新版的技能不分人格）。")
     },
     disabled: |name| format!("`{name}` 原来停用了，新版里是开着的，不要的在设置里关掉。"),
+    links_left: |name, n| {
+        format!("技能 `{name}` 里有 {n} 个链接没拷（链接不跟，可能指到技能外面），留在压缩包里。")
+    },
     ported: |listed| format!("有新包的到官方源装：{listed}。"),
     scripts_left: |n, agent| {
         format!(
@@ -99,6 +104,11 @@ static SKILLS_EN: Skills = Skills {
     disabled: |name| {
         format!(
             "`{name}` was turned off; it is on in the new version, so turn it off in settings if you do not want it."
+        )
+    },
+    links_left: |name, n| {
+        format!(
+            "{n} link(s) in the skill `{name}` were not copied (links are not followed; they may point outside the skill); they stay in the archive."
         )
     },
     ported: |listed| {

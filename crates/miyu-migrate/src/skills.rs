@@ -116,7 +116,7 @@ pub fn migrate(copy: &Layout, root: &Path, language: Language) -> Moved {
         }
         match copy_skill(&dir, &target) {
             Ok(Copied::Present) => {}
-            Ok(Copied::As(name)) => {
+            Ok(Copied::As(name, links)) => {
                 skills.migrated += 1;
                 let original = dir
                     .file_name()
@@ -130,6 +130,14 @@ pub fn migrate(copy: &Layout, root: &Path, language: Language) -> Moved {
                 }
                 if dir.join(".disabled").exists() {
                     notes.push((words.disabled)(&name));
+                }
+                if !links.is_empty() {
+                    notes.push((words.links_left)(&name, links.len()));
+                }
+                for link in &links {
+                    skills
+                        .skipped
+                        .push(skip(&relative(&dir.join(link)), "link"));
                 }
             }
             Err(error) => skills
@@ -225,11 +233,11 @@ fn children(dir: &Path) -> Vec<PathBuf> {
 enum Copied {
     /// 新版已经有一样的（以前迁过）。
     Present,
-    /// 拷成了这个名字。
-    As(String),
+    /// 拷成了这个名字；里面没拷的链接（技能目录里的相对路径）。
+    As(String, Vec<PathBuf>),
 }
 
-/// 一个技能拷进 `target/<名字>/`：同名的内容一样的算迁过，不一样的改名。
+/// 一个技能拷进 `target/<名字>/`：同名的内容一样的算迁过，不一样的改名。链接不跟、不拷（可能指到技能目录外面），交回去写进报告。
 fn copy_skill(dir: &Path, target: &Path) -> io::Result<Copied> {
     let original = dir
         .file_name()
@@ -247,6 +255,7 @@ fn copy_skill(dir: &Path, target: &Path) -> io::Result<Copied> {
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound && !at.exists() => {
                 fs::create_dir_all(&at)?;
+                let mut links = Vec::new();
                 for entry in walkdir::WalkDir::new(dir).min_depth(1) {
                     let entry = entry.map_err(io::Error::other)?;
                     let inside = entry.path().strip_prefix(dir).map_err(io::Error::other)?;
@@ -258,10 +267,14 @@ fn copy_skill(dir: &Path, target: &Path) -> io::Result<Copied> {
                         fs::create_dir_all(&to)?;
                     } else if entry.file_type().is_file() {
                         fs::copy(entry.path(), &to)?;
+                    } else if entry.file_type().is_symlink() && inside != Path::new("SKILL.md") {
+                        // `SKILL.md` 下面照读到的内容另写，不算没拷。
+                        links.push(inside.to_path_buf());
                     }
                 }
+                links.sort();
                 fs::write(at.join("SKILL.md"), wanted)?;
-                return Ok(Copied::As(name));
+                return Ok(Copied::As(name, links));
             }
             Err(_) => {}
         }
