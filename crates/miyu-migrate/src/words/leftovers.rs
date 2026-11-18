@@ -72,6 +72,14 @@ pub struct Leftovers {
     pub outside_old: &'static str,
     /// 数据根外面的是什么。
     pub outside_format: &'static str,
+    /// 旧版 fish 终端集成的那份：新版 `install` 会备份后清掉。
+    pub outside_fish: &'static str,
+    /// 启动文件里旧版终端集成那一段是什么（哪种 shell）。
+    pub hook_format: fn(&str) -> String,
+    /// 启动文件里旧版那几段：哪种 shell、每段的开头行和结尾行（从 1 数）。
+    pub hook_note: fn(&str, &[(usize, usize)]) -> String,
+    /// 启动文件读不了（为什么）。
+    pub hook_unreadable: fn(&str) -> String,
 }
 
 static ZH: Leftovers = Leftovers {
@@ -111,6 +119,25 @@ static ZH: Leftovers = Leftovers {
     outside_new: "这是新版的 miyu，不是旧版的，别删。",
     outside_old: "旧版装过这个，确认是旧版的、用不着了再删；删不删由你定。",
     outside_format: "数据根外面的文件，不在压缩包里",
+    outside_fish: "旧版的 fish 终端集成，迁移不动它；在新版里跑 `miyu shellhook install --shell fish` 时，认得出是旧版的会先备份再清掉，不用终端集成的可以自己删。",
+    hook_format: |shell| {
+        format!(
+            "启动文件里旧版终端集成写的一段：从独占一行的 `# >>> miyu {shell} hook >>>` 到 `# <<< miyu {shell} hook <<<`，中间一行 source 旧数据根里的 hook 脚本；数据根外面的文件，不在压缩包里"
+        )
+    },
+    hook_note: |shell, blocks| {
+        let lines: Vec<String> = blocks
+            .iter()
+            .map(|(from, to)| format!("第 {from}～{to} 行"))
+            .collect();
+        format!(
+            "{}是旧版终端集成写的一段，迁移不动它；在新版里跑 `miyu shellhook install --shell {shell}` 装上 {shell} 的集成时会先备份再删掉它，不用终端集成的可以自己删这几行。",
+            lines.join("、")
+        )
+    },
+    hook_unreadable: |error| {
+        format!("读不了这个文件（{error}），没看里面有没有旧版终端集成写的一段。")
+    },
 };
 
 static EN: Leftovers = Leftovers {
@@ -161,6 +188,27 @@ static EN: Leftovers = Leftovers {
     outside_new: "This is the new miyu, not the old one. Do not delete it.",
     outside_old: "The old version installed this. Delete it once you are sure it is the old one and no longer needed; that is up to you.",
     outside_format: "a file outside the data root, not in the archive",
+    outside_fish: "The old fish terminal integration. Migration leaves it alone; running `miyu shellhook install --shell fish` in the new version backs it up and removes it if it is recognized as the old one. If you do not use the terminal integration, you can delete it yourself.",
+    hook_format: |shell| {
+        format!(
+            "a block written into a shell startup file by the old terminal integration: from a line that is just `# >>> miyu {shell} hook >>>` to `# <<< miyu {shell} hook <<<`, with a line in between that sources the hook script in the old data root; a file outside the data root, not in the archive"
+        )
+    },
+    hook_note: |shell, blocks| {
+        let lines: Vec<String> = blocks
+            .iter()
+            .map(|(from, to)| format!("{from}-{to}"))
+            .collect();
+        format!(
+            "Lines {} were written by the old terminal integration. Migration leaves them alone; running `miyu shellhook install --shell {shell}` in the new version backs the file up and removes them. If you do not use the terminal integration, you can delete these lines yourself.",
+            lines.join(", ")
+        )
+    },
+    hook_unreadable: |error| {
+        format!(
+            "Could not read this file ({error}), so it was not checked for a block written by the old terminal integration."
+        )
+    },
 };
 
 /// 照语言挑零碎的字。

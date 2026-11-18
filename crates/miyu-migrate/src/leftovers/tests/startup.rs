@@ -13,8 +13,11 @@ const ZSH_BLOCK: &str = "# >>> miyu zsh hook >>>\n[ -r '/home/u/.miyu/shell/hook
 /// 零碎里数据根外面的那几项：`home` 当家目录，`zdotdir` 当 `ZDOTDIR`。
 fn outside_items(home: &Path, zdotdir: Option<&Path>, language: Language) -> Vec<Item> {
     let (_old, layout) = old_root();
-    let _ = zdotdir;
-    items(&layout, Some(home), language)
+    let home = Home::new(
+        home.to_path_buf(),
+        zdotdir.map(|dir| dir.as_os_str().to_owned()),
+    );
+    items(&layout, Some(&home), language)
         .into_iter()
         .filter(|item| item.what.starts_with("outside/"))
         .collect()

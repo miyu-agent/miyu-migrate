@@ -6,6 +6,7 @@ use std::process::ExitCode;
 
 use miyu_client::places::{DataRoot, Env};
 use miyu_migrate::core::Live;
+use miyu_migrate::leftovers::Home;
 use miyu_migrate::run::{self, Plan};
 use miyu_migrate::words::{Language, cli};
 
@@ -55,7 +56,7 @@ fn main() -> ExitCode {
         state,
         at: jiff::Timestamp::now(),
         root: root.clone(),
-        home: std::env::home_dir(),
+        home: std::env::home_dir().map(|dir| Home::new(dir, std::env::var_os("ZDOTDIR"))),
         records,
         space: run::free_space,
         language,

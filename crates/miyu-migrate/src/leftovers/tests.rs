@@ -59,6 +59,11 @@ fn old_root() -> (tempfile::TempDir, Layout) {
     (dir, layout)
 }
 
+/// 临时家目录，没有 `ZDOTDIR`。
+fn at(dir: &Path) -> Home {
+    Home::new(dir.to_path_buf(), None)
+}
+
 fn find<'a>(items: &'a [Item], what: &str) -> &'a Item {
     items
         .iter()
@@ -124,14 +129,19 @@ fn outside_things_are_reported_and_the_new_wrapper_is_kept() {
         b"#!/bin/sh\n# miyu-remake wrapper\n",
     );
     write(&home.path().join(".config/fish/conf.d/miyu.fish"), b"");
-    let items = items(&layout, Some(home.path()), Language::Zh);
+    let items = items(&layout, Some(&at(home.path())), Language::Zh);
     let wrapper = find(&items, "outside/.local/bin/miyu");
     assert_eq!(
         wrapper.note.as_deref(),
         Some("这是新版的 miyu，不是旧版的，别删。")
     );
     let fish = find(&items, "outside/.config/fish/conf.d/miyu.fish");
-    assert!(fish.note.as_deref().unwrap().contains("确认是旧版的"));
+    assert!(
+        fish.note
+            .as_deref()
+            .unwrap()
+            .contains("miyu shellhook install --shell fish")
+    );
     assert!(
         !items
             .iter()
@@ -152,7 +162,7 @@ fn a_link_into_the_installed_lib_is_the_new_version() {
     write(&lib.join("install.toml"), b"channel = \"script\"\n");
     fs::create_dir_all(home.path().join(".local/bin")).unwrap();
     std::os::unix::fs::symlink(lib.join("miyu"), home.path().join(".local/bin/miyu")).unwrap();
-    let listed = items(&layout, Some(home.path()), Language::Zh);
+    let listed = items(&layout, Some(&at(home.path())), Language::Zh);
     let note = find(&listed, "outside/.local/bin/miyu")
         .note
         .clone()
@@ -170,7 +180,7 @@ fn a_link_into_the_installed_lib_is_the_new_version() {
         other.path().join(".local/bin/miyu"),
     )
     .unwrap();
-    let listed = items(&layout, Some(other.path()), Language::Zh);
+    let listed = items(&layout, Some(&at(other.path())), Language::Zh);
     let note = find(&listed, "outside/.local/bin/miyu")
         .note
         .clone()
@@ -191,7 +201,7 @@ fn leftovers_read_in_english_when_asked() {
     let (_old, layout) = old_root();
     let home = tempfile::tempdir().unwrap();
     write(&home.path().join(".config/fish/conf.d/miyu.fish"), b"");
-    let listed = items(&layout, Some(home.path()), Language::En);
+    let listed = items(&layout, Some(&at(home.path())), Language::En);
     assert!(listed.len() > 5, "{listed:?}");
     for item in &listed {
         // 几份的来源照旧用「、」并（给 agent 的那份的格式不变），给人看的报告里英文换成逗号。

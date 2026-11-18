@@ -29,8 +29,8 @@ pub struct Plan {
     pub root: miyu_client::places::DataRoot,
     /// QQ 消息记录交 im 导（真跑的是 `miyu im records import`）。
     pub records: crate::records::Importer,
-    /// 这台机器的家目录：报告看数据根外面旧版装过的东西（测试不写）。
-    pub home: Option<PathBuf>,
+    /// 这台机器的家目录和 `ZDOTDIR`：报告看数据根外面旧版装过的东西（测试不写）。
+    pub home: Option<crate::leftovers::Home>,
     /// 一块盘还剩多少字节（真跑的是 [`free_space`]，测试换成假的）。
     pub space: fn(&Path) -> io::Result<u64>,
     /// 给人看的字用哪种语言（报告、留给人的目录名；施工 MG-21）。
@@ -250,7 +250,7 @@ pub fn run(plan: &Plan, core: &mut dyn Core) -> Result<Done, RunError> {
         .push(crate::sponsors::migrate(core, &copy, plan.language).map_err(RunError::Core)?);
     report.items.extend(crate::leftovers::items(
         &copy,
-        plan.home.as_deref(),
+        plan.home.as_ref(),
         plan.language,
     ));
     report.personas = mapped;

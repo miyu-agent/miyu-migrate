@@ -5,7 +5,8 @@
 //!   手动备份、网页、语音、定时提醒、别的旧状态。
 //! - 派生的（`skipped`，`what` 以 `derived/` 开头）：新版自己重建，给人看的报告合成一行。
 //! - 数据根外面的（`skipped`，`what` 以 `outside/` 开头）：只报在不在，删不删由人定；`~/.local/bin/miyu` 是新版的（安装脚本链到
-//!   `~/.local/lib/miyu/` 的、写着 miyu-remake 的包装脚本）照实说。
+//!   `~/.local/lib/miyu/` 的、写着 miyu-remake 的包装脚本）照实说；旧版终端集成写进 bash、zsh 启动文件的那段报哪个文件第几行
+//!   （`leftovers/startup.rs`），fish 那份和它们都说新版 `miyu shellhook install` 会先备份再清掉。只报不动。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,6 +18,8 @@ use crate::layout::Layout;
 use crate::report::{Item, Status};
 use crate::words::Language;
 use crate::words::leftovers::Leftovers;
+
+pub use startup::Home;
 
 /// 一样零碎：报告里叫什么、在旧根的哪几个相对路径、旧格式一句话（从字表里取）、要不要另外数库里的条数。
 struct Entry {
@@ -156,15 +159,18 @@ const DERIVED: &[Entry] = &[
 /// 数据根外面旧版装过的（相对家目录）。
 const OUTSIDE: &[&str] = &[
     ".local/bin/miyu",
-    ".config/fish/conf.d/miyu.fish",
+    OLD_FISH,
     ".gemini/config/agents/miyu",
     ".gemini/antigravity-cli",
     ".cache/miyu/voice-models",
     ".local/state/miyu",
 ];
 
-/// 零碎这几项：`copy` 是解出来的副本，`home` 是这台机器的家目录（看数据根外面的，测试换成临时目录）。
-pub fn items(copy: &Layout, home: Option<&Path>, language: Language) -> Vec<Item> {
+/// 旧版 fish 终端集成的那份（新版 `install` 认得出是旧版的会备份后清掉）。
+const OLD_FISH: &str = ".config/fish/conf.d/miyu.fish";
+
+/// 零碎这几项：`copy` 是解出来的副本，`home` 是这台机器的家目录和 `ZDOTDIR`（看数据根外面的，测试换成临时目录）。
+pub fn items(copy: &Layout, home: Option<&Home>, language: Language) -> Vec<Item> {
     let words = crate::words::leftovers::words(language);
     let mut items = Vec::new();
     for entry in ARCHIVED.iter().chain(DERIVED) {
@@ -193,7 +199,8 @@ pub fn items(copy: &Layout, home: Option<&Path>, language: Language) -> Vec<Item
     items.extend(platform(copy, language));
     items.extend(memory(copy, language));
     if let Some(home) = home {
-        items.extend(outside(home, words));
+        items.extend(outside(&home.dir, words));
+        items.extend(startup::items(home, words));
     }
     items
 }
@@ -390,7 +397,7 @@ fn memory(copy: &Layout, language: Language) -> Option<Item> {
     })
 }
 
-/// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版的照实说（[`is_new_miyu`]）。
+/// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版的照实说（[`is_new_miyu`]）；fish 那份说新版 install 会清。
 fn outside(home: &Path, words: &Leftovers) -> Vec<Item> {
     OUTSIDE
         .iter()
@@ -400,6 +407,8 @@ fn outside(home: &Path, words: &Leftovers) -> Vec<Item> {
             let newer = *path == ".local/bin/miyu" && is_new_miyu(home, &full);
             let note = if newer {
                 words.outside_new
+            } else if *path == OLD_FISH {
+                words.outside_fish
             } else {
                 words.outside_old
             };
@@ -460,6 +469,8 @@ fn relative(path: &Path, root: &Path) -> String {
         .to_string_lossy()
         .replace('\\', "/")
 }
+
+mod startup;
 
 #[cfg(test)]
 mod tests;
