@@ -1,6 +1,6 @@
 //! 旧版终端集成写进 bash、zsh 启动文件的那段（SH-OLD）：只报不动。认法同新版终端集成 `install` 清旧版那一份（终端蓝图
-//! 「旧版那一份」）：候选文件照旧版 `startup.rs`，记号独占一行（两头空白、行尾 `\r` 不算），从开头记号到它后面头一个结尾
-//! 记号算一段，只有开头的不算，一个文件几段都报；照字节读，不是 UTF-8 的也一样。启动文件只读，不写、不建、不改权限；
+//! 「旧版那一份」）：候选文件照旧版 `startup.rs`，记号独占一行（两头空白、行尾 `\r` 不算），一个结尾记号和它前面最近的
+//! 开头记号之间算一段（同终端 install 实际删的），只有开头的、孤立的结尾不算，一个文件几段都报；照字节读，不是 UTF-8 的也一样。启动文件只读，不写、不建、不改权限；
 //! 读不了的报一项说读不了，不让零碎失败。
 
 use std::ffi::OsString;
@@ -105,7 +105,7 @@ fn named(home: &Path, file: &Path) -> (String, String) {
     )
 }
 
-/// 文件里旧版写的那几段：(开头记号那一行, 结尾记号那一行)，从 1 数。
+/// 文件里旧版写的那几段：(开头记号那一行, 结尾记号那一行)，从 1 数；开头取结尾前面最近的那个。
 fn blocks(bytes: &[u8], shell: &str) -> Vec<(usize, usize)> {
     let begin = format!("# >>> miyu {shell} hook >>>");
     let end = format!("# <<< miyu {shell} hook <<<");
@@ -113,13 +113,13 @@ fn blocks(bytes: &[u8], shell: &str) -> Vec<(usize, usize)> {
     let mut open = None;
     for (index, line) in bytes.split(|byte| *byte == b'\n').enumerate() {
         let line = line.trim_ascii();
-        match open {
-            None if line == begin.as_bytes() => open = Some(index + 1),
-            Some(start) if line == end.as_bytes() => {
-                found.push((start, index + 1));
-                open = None;
-            }
-            _ => {}
+        if line == begin.as_bytes() {
+            // 开着又遇到开头的：前一个只有开头、不算一段，从这个重新算。
+            open = Some(index + 1);
+        } else if line == end.as_bytes()
+            && let Some(start) = open.take()
+        {
+            found.push((start, index + 1));
         }
     }
     found
