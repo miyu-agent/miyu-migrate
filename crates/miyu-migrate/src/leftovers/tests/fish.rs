@@ -93,3 +93,83 @@ fn without_xdg_the_item_is_unchanged() {
         }]
     );
 }
+
+/// 旧数据根挪走以后，fish 那份是个悬空的链接：照样报，写法同普通文件，note 写原来指到哪、新版 install 会删掉这个链接
+/// （终端那边对悬空链接只删链接、不备份）。
+#[cfg(unix)]
+#[test]
+fn a_dangling_fish_link_is_reported_with_where_it_pointed() {
+    let home = tempfile::tempdir().unwrap();
+    let gone = home.path().join(".miyu/shell/hook.fish");
+    let link = home.path().join(".config/fish/conf.d/miyu.fish");
+    fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&gone, &link).unwrap();
+    let listed = outside_items(home.path(), None);
+    let fish = find(&listed, IN_HOME);
+    assert_eq!(fish.source, "~/.config/fish/conf.d/miyu.fish");
+    let note = fish.note.clone().unwrap();
+    assert!(
+        note.contains(&gone.display().to_string())
+            && note.contains("删掉这个链接")
+            && note.contains("miyu shellhook install --shell fish")
+            && !note.contains("备份"),
+        "{note}"
+    );
+    assert_eq!(listed.len(), 1, "{listed:?}");
+
+    let (_old, layout) = old_root();
+    let english = items(
+        &layout,
+        Some(&Home::new(home.path().to_path_buf(), None, None)),
+        Language::En,
+    );
+    let note = find(&english, IN_HOME).note.clone().unwrap();
+    assert!(
+        note.contains(&gone.display().to_string())
+            && note.contains("deletes this link")
+            && !note.contains("backs it up")
+            && !note
+                .chars()
+                .any(|one| ('\u{4e00}'..='\u{9fff}').contains(&one)
+                    || "，。；：（）、".contains(one)),
+        "{note}"
+    );
+}
+
+/// 设了 XDG_CONFIG_HOME 的悬空链接也报，路径照 XDG 写。
+#[cfg(unix)]
+#[test]
+fn a_dangling_fish_link_under_xdg_is_reported() {
+    let home = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let link = config.path().join("fish/conf.d/miyu.fish");
+    fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(home.path().join("gone.fish"), &link).unwrap();
+    let listed = outside_items(home.path(), Some(config.path().as_os_str()));
+    let fish = find(&listed, "outside/$XDG_CONFIG_HOME/fish/conf.d/miyu.fish");
+    assert_eq!(fish.source, link.display().to_string());
+    assert!(
+        fish.note.as_deref().unwrap().contains("删掉这个链接"),
+        "{fish:?}"
+    );
+}
+
+/// 指到还在的文件的链接：输出和普通文件一样；没有这个名字的不报。
+#[cfg(unix)]
+#[test]
+fn a_live_fish_link_reads_like_a_file_and_no_name_is_nothing() {
+    let plain = tempfile::tempdir().unwrap();
+    write(&plain.path().join(".config/fish/conf.d/miyu.fish"), b"");
+    let home = tempfile::tempdir().unwrap();
+    let target = home.path().join(".miyu/shell/hook.fish");
+    write(&target, b"# miyu shell hook \xc2\xb7 v0.7.4\n");
+    let link = home.path().join(".config/fish/conf.d/miyu.fish");
+    fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    assert_eq!(
+        outside_items(home.path(), None),
+        outside_items(plain.path(), None)
+    );
+    let empty = tempfile::tempdir().unwrap();
+    assert!(outside_items(empty.path(), None).is_empty());
+}
