@@ -345,3 +345,40 @@ fn version_matches_the_package_manifest() {
         .expect("清单写着版本");
     assert_eq!(env!("CARGO_PKG_VERSION"), declared);
 }
+
+/// 连上以后头一次调用就断开的核心。
+struct Gone;
+
+impl Core for Gone {
+    fn call(&mut self, _method: &str, _params: Value) -> Result<Value, Said> {
+        Err(Said {
+            code: "disconnected".to_string(),
+            message: "the core went away".to_string(),
+        })
+    }
+}
+
+/// 审计 #143：状态目录里解出来的副本（整份旧数据根，`config/config.jsonc` 里有明文 Key）只在最后 `remove_dir_all`；解包以后
+/// 中途任何一个 `?` 返回（这里是核心断开）都把它留在盘上。出错也要删。
+#[test]
+fn audit_143_a_run_that_fails_midway_leaves_no_unpacked_copy() {
+    let old = old_root();
+    fs::create_dir_all(old.path().join("config")).unwrap();
+    fs::write(
+        old.path().join("config/config.jsonc"),
+        r#"{"providers": [{"id": "x", "api_key": "sk-secret"}]}"#,
+    )
+    .unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let got = run(&plan(old.path(), state.path()), &mut Gone);
+    assert!(
+        matches!(got, Err(RunError::Core(_))),
+        "要在解包以后、核心那一步出错：{got:?}"
+    );
+    let scratch = state.path().join("20261104T080000Z");
+    assert!(
+        !scratch.exists(),
+        "出错以后状态目录里还留着解出来的旧根：{}",
+        scratch.display()
+    );
+}

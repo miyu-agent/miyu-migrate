@@ -157,3 +157,17 @@ fn own_skills_are_copied_and_the_rest_is_reported() {
     assert_eq!(again.skills.migrated, 0, "以前迁过的一样的不再拷");
     assert!(!skills.join("notes-legacy-3").exists());
 }
+
+/// 审计 #143：找 YAML 头结尾用的是 `rest.find("\n---")`，不要求后面跟换行或到结尾；头里有一行以 `---` 开头（比如块字符串里的
+/// `---foo`）就被当成头的结尾，后面的 `name:` 不改名，技能目录名和头里的 name 对不上。
+#[test]
+fn audit_143_a_line_starting_with_dashes_inside_the_header_is_not_its_end() {
+    let text = "---\ndescription: |\n---foo\nname: old\n---\nbody line\n";
+    let renamed = rename(text, "new");
+    assert!(renamed.contains("\nname: new\n"), "name 没改：{renamed:?}");
+    assert!(!renamed.contains("name: old"), "{renamed:?}");
+    assert!(
+        renamed.ends_with("---\nbody line\n"),
+        "正文原样：{renamed:?}"
+    );
+}

@@ -172,3 +172,23 @@ fn only_the_builtin_wiki_makes_no_base() {
     assert!(item.note.unwrap().contains("只有内置的默认库（1 篇"));
     assert!(core.calls.is_empty(), "不建空库");
 }
+
+/// 审计 #143：`kb_meta.db` 坏了、读不了，`listed()` 的任何错误都被说成「旧根里没有知识库」。读不了要写原因，不能报成没有。
+#[test]
+fn audit_143_a_broken_knowledge_list_is_not_reported_as_no_knowledge_base() {
+    let (old, layout) = old_root();
+    fs::write(
+        old.path().join("data/kb/kb_meta.db"),
+        b"this is not a sqlite database at all, just garbage bytes ".repeat(64),
+    )
+    .unwrap();
+    let new = tempfile::tempdir().unwrap();
+    let mut core = Fake {
+        exists: false,
+        calls: Vec::new(),
+    };
+    let item = migrate(&mut core, &layout, new.path(), Language::Zh).unwrap();
+    let none = crate::words::files::knowledge(Language::Zh).none;
+    assert_ne!(item.status, Status::Skipped, "读不了不是「没有」：{item:?}");
+    assert_ne!(item.note.as_deref(), Some(none), "报告不能写「{none}」");
+}
