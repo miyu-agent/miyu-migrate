@@ -98,7 +98,7 @@ fn rehearse() {
         root: fresh.root.clone(),
         records: im(&fresh.root),
         home: std::env::var_os("MIYU_MIGRATE_HOME")
-            .map(|dir| miyu_migrate::leftovers::Home::new(PathBuf::from(dir), None)),
+            .map(|dir| miyu_migrate::leftovers::Home::new(PathBuf::from(dir), None, None)),
         space: run::free_space,
         language: miyu_migrate::words::Language::Zh,
     };

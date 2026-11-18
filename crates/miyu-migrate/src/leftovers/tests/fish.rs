@@ -8,8 +8,7 @@ use super::*;
 /// 零碎里数据根外面的那几项：`home` 当家目录，`xdg` 当 `XDG_CONFIG_HOME`。
 fn outside_items(home: &Path, xdg: Option<&OsStr>) -> Vec<Item> {
     let (_old, layout) = old_root();
-    let _ = xdg;
-    let home = Home::new(home.to_path_buf(), None);
+    let home = Home::new(home.to_path_buf(), None, xdg.map(OsStr::to_owned));
     items(&layout, Some(&home), Language::Zh)
         .into_iter()
         .filter(|item| item.what.starts_with("outside/"))

@@ -16,6 +16,7 @@ fn outside_items(home: &Path, zdotdir: Option<&Path>, language: Language) -> Vec
     let home = Home::new(
         home.to_path_buf(),
         zdotdir.map(|dir| dir.as_os_str().to_owned()),
+        None,
     );
     items(&layout, Some(&home), language)
         .into_iter()

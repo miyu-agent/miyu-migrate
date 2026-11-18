@@ -11,21 +11,38 @@ use std::path::{Path, PathBuf};
 use crate::report::{Item, Status};
 use crate::words::leftovers::Leftovers;
 
-/// 这台机器的家目录和 `ZDOTDIR`：看数据根外面旧版装过的东西（测试换成临时目录）。
+/// 这台机器的家目录、`ZDOTDIR`、`XDG_CONFIG_HOME`：看数据根外面旧版装过的东西（测试换成临时目录）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     /// 家目录。
     pub dir: PathBuf,
     /// zsh 的启动文件跟着的 `ZDOTDIR`；没设、空的、不是绝对路径的是 `None`。
     pub zdotdir: Option<PathBuf>,
+    /// fish 的配置跟着的 `XDG_CONFIG_HOME`；没设、空的、不是绝对路径的是 `None`（看 `~/.config`）。
+    pub config: Option<PathBuf>,
 }
 
 impl Home {
-    /// `zdotdir` 是环境里 `ZDOTDIR` 的原样：空的、不是绝对路径的不算（相对路径 zsh 照它起来时的目录找，迁移时猜不到）。
+    /// `zdotdir`、`config` 是环境里 `ZDOTDIR`、`XDG_CONFIG_HOME` 的原样：空的、不是绝对路径的不算（相对路径照 shell
+    /// 起来时的目录找，迁移时猜不到；旧版 `paths::fish_conf_dir` 也只认绝对路径）。
     #[must_use]
-    pub fn new(dir: PathBuf, zdotdir: Option<OsString>) -> Home {
-        let zdotdir = zdotdir.map(PathBuf::from).filter(|path| path.is_absolute());
-        Home { dir, zdotdir }
+    pub fn new(dir: PathBuf, zdotdir: Option<OsString>, config: Option<OsString>) -> Home {
+        let absolute =
+            |value: Option<OsString>| value.map(PathBuf::from).filter(|path| path.is_absolute());
+        Home {
+            dir,
+            zdotdir: absolute(zdotdir),
+            config: absolute(config),
+        }
+    }
+
+    /// 旧版 fish 终端集成的那份：`$XDG_CONFIG_HOME/fish/conf.d/miyu.fish`，没设的在 `~/.config` 下（同旧版
+    /// `paths::fish_conf_dir`、新版终端 install）。
+    pub(super) fn old_fish(&self) -> PathBuf {
+        self.config
+            .clone()
+            .unwrap_or_else(|| self.dir.join(".config"))
+            .join("fish/conf.d/miyu.fish")
     }
 }
 
@@ -45,7 +62,12 @@ pub(super) fn items(home: &Home, words: &Leftovers) -> Vec<Item> {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
                 Err(error) => (words.hook_unreadable)(&error.to_string()),
             };
-            let (what, source) = named(&home.dir, &file);
+            let (what, source) = named(
+                &home.dir,
+                &file,
+                "ZDOTDIR",
+                home.zdotdir.as_deref().unwrap_or(&home.dir),
+            );
             Some(Item {
                 what,
                 status: Status::Skipped,
@@ -88,19 +110,24 @@ fn same(one: &Path, other: &Path) -> bool {
             .is_some_and(|(one, other)| one == other)
 }
 
-/// 报告里叫什么、写哪个文件：家目录里的是 `outside/<相对路径>` 和 `~/<相对路径>`；`ZDOTDIR` 指到家目录外面的是
-/// `outside/$ZDOTDIR/<文件名>` 和实际路径。
-fn named(home: &Path, file: &Path) -> (String, String) {
+/// 报告里叫什么、写哪个文件：家目录里的是 `outside/<相对路径>` 和 `~/<相对路径>`；环境变量 `var`（`ZDOTDIR`、
+/// `XDG_CONFIG_HOME`）指到家目录外面的 `base` 里的，是 `outside/$<var>/<相对 base 的路径>` 和实际路径。
+pub(super) fn named(home: &Path, file: &Path, var: &str, base: &Path) -> (String, String) {
+    let slashed = |path: &Path| path.to_string_lossy().replace('\\', "/");
     if let Ok(relative) = file.strip_prefix(home) {
-        let relative = relative.to_string_lossy().replace('\\', "/");
+        let relative = slashed(relative);
         return (format!("outside/{relative}"), format!("~/{relative}"));
     }
-    let name = file
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let relative = file.strip_prefix(base).map_or_else(
+        |_| {
+            file.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default()
+        },
+        slashed,
+    );
     (
-        format!("outside/$ZDOTDIR/{name}"),
+        format!("outside/${var}/{relative}"),
         file.display().to_string(),
     )
 }

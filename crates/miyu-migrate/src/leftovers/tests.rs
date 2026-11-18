@@ -62,7 +62,7 @@ fn old_root() -> (tempfile::TempDir, Layout) {
 
 /// 临时家目录，没有 `ZDOTDIR`。
 fn at(dir: &Path) -> Home {
-    Home::new(dir.to_path_buf(), None)
+    Home::new(dir.to_path_buf(), None, None)
 }
 
 fn find<'a>(items: &'a [Item], what: &str) -> &'a Item {

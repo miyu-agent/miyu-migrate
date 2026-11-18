@@ -56,7 +56,13 @@ fn main() -> ExitCode {
         state,
         at: jiff::Timestamp::now(),
         root: root.clone(),
-        home: std::env::home_dir().map(|dir| Home::new(dir, std::env::var_os("ZDOTDIR"))),
+        home: std::env::home_dir().map(|dir| {
+            Home::new(
+                dir,
+                std::env::var_os("ZDOTDIR"),
+                std::env::var_os("XDG_CONFIG_HOME"),
+            )
+        }),
         records,
         space: run::free_space,
         language,

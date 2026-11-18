@@ -166,7 +166,7 @@ const OUTSIDE: &[&str] = &[
     ".local/state/miyu",
 ];
 
-/// 旧版 fish 终端集成的那份（新版 `install` 认得出是旧版的会备份后清掉）。
+/// 旧版 fish 终端集成的那份，没设 `XDG_CONFIG_HOME` 时的位置（[`Home::old_fish`]；新版 `install` 认得出是旧版的会备份后清掉）。
 const OLD_FISH: &str = ".config/fish/conf.d/miyu.fish";
 
 /// 零碎这几项：`copy` 是解出来的副本，`home` 是这台机器的家目录和 `ZDOTDIR`（看数据根外面的，测试换成临时目录）。
@@ -199,7 +199,7 @@ pub fn items(copy: &Layout, home: Option<&Home>, language: Language) -> Vec<Item
     items.extend(platform(copy, language));
     items.extend(memory(copy, language));
     if let Some(home) = home {
-        items.extend(outside(&home.dir, words));
+        items.extend(outside(home, words));
         items.extend(startup::items(home, words));
     }
     items
@@ -398,13 +398,20 @@ fn memory(copy: &Layout, language: Language) -> Option<Item> {
 }
 
 /// 数据根外面旧版装过的：在的才报；`~/.local/bin/miyu` 是新版的照实说（[`is_new_miyu`]）；fish 那份说新版 install 会清。
-fn outside(home: &Path, words: &Leftovers) -> Vec<Item> {
+fn outside(home: &Home, words: &Leftovers) -> Vec<Item> {
     OUTSIDE
         .iter()
-        .filter(|path| home.join(path).exists())
-        .map(|path| {
-            let full = home.join(path);
-            let newer = *path == ".local/bin/miyu" && is_new_miyu(home, &full);
+        .filter_map(|path| {
+            // fish 那份照 `XDG_CONFIG_HOME` 找（没设的就是 `~/.config/…`，和别的一样）。
+            let full = if *path == OLD_FISH {
+                home.old_fish()
+            } else {
+                home.dir.join(path)
+            };
+            if !full.exists() {
+                return None;
+            }
+            let newer = *path == ".local/bin/miyu" && is_new_miyu(&home.dir, &full);
             let note = if newer {
                 words.outside_new
             } else if *path == OLD_FISH {
@@ -412,16 +419,18 @@ fn outside(home: &Path, words: &Leftovers) -> Vec<Item> {
             } else {
                 words.outside_old
             };
-            Item {
-                what: format!("outside/{path}"),
+            let base = home.config.as_deref().unwrap_or(&home.dir);
+            let (what, source) = startup::named(&home.dir, &full, "XDG_CONFIG_HOME", base);
+            Some(Item {
+                what,
                 status: Status::Skipped,
-                source: format!("~/{path}"),
+                source,
                 format: words.outside_format.to_string(),
                 migrated: 0,
                 skipped: Vec::new(),
                 target: None,
                 note: Some(note.to_string()),
-            }
+            })
         })
         .collect()
 }
