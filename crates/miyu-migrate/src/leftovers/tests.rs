@@ -8,6 +8,7 @@ use serde_json::json;
 
 use super::*;
 
+mod fish;
 mod startup;
 
 fn write(path: &Path, bytes: &[u8]) {
