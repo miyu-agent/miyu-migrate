@@ -42,11 +42,17 @@ pub fn migrate(core: &mut dyn Core, copy: &Layout, language: Language) -> Result
         target: Some(format!("bus.call {BUS_NAME}.import")),
         note: None,
     };
-    let entries = match read(&path) {
-        Ok(entries) if !entries.is_empty() => entries,
-        _ => {
+    // 没有会话库、没有这张表、表是空的才是「没有」；库在却读不了的写原因，记录留在压缩包里。
+    let entries = match path.is_file().then(|| read(&path)) {
+        Some(Ok(entries)) if !entries.is_empty() => entries,
+        None | Some(Ok(_)) => {
             item.status = Status::Skipped;
             item.note = Some(words.none.to_string());
+            return Ok(item);
+        }
+        Some(Err(error)) => {
+            item.status = Status::Archived;
+            item.note = Some((words.unreadable)(&error.to_string()));
             return Ok(item);
         }
     };
@@ -205,7 +211,12 @@ pub fn entry(row: &Row) -> Value {
         "amount": minor(row.amount),
         "currency": currency,
         "base": "CNY",
-        "converted": minor(row.converted),
+        // 外币没折算的（旧版写 `cny_minor = 0`、`fx_rate = 0`）是「未换算」，不是 0 元。
+        "converted": if currency != "CNY" && row.converted == 0 && row.rate <= 0.0 {
+            Value::Null
+        } else {
+            minor(row.converted)
+        },
         "rate": rate,
         "at": at,
         "note": if note.is_empty() { Value::Null } else { json!(note) },

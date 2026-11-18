@@ -26,6 +26,8 @@ pub struct Sponsors {
     pub source: fn(&str) -> String,
     /// 旧版没有。
     pub none: &'static str,
+    /// 会话库在、读不了：系统的原话。
+    pub unreadable: fn(&str) -> String,
     /// 插件没装：几笔、插件。
     pub not_installed: fn(usize, &str) -> String,
     /// 导了：几笔、新加几笔、本来就有几笔。
@@ -74,6 +76,7 @@ static SPONSORS_ZH: Sponsors = Sponsors {
     format: "会话库（SQLite v32 起）的 sponsor_records：platform（onebot）、account_id、sponsor_id（QQ 号或名字）、sponsor_name、amount_minor（分）、currency、cny_minor、fx_rate（同币种写 0）、note、recorded_by、sponsored_at（RFC 3339）",
     source: |db| format!("{db}（sponsor_records）"),
     none: "旧版没有赞助记录。",
+    unreadable: |error| format!("会话库读不了（{error}），赞助记录没迁，留在压缩包里。"),
     not_installed: |n, plugin| {
         format!("{n} 笔赞助记录：赞助插件 `{plugin}` 没装，装上以后重跑迁移（重跑不会多出来）。")
     },
@@ -98,6 +101,11 @@ static SPONSORS_EN: Sponsors = Sponsors {
     format: "sponsor_records in the session database (SQLite v32 and later): platform (onebot), account_id, sponsor_id (QQ number or name), sponsor_name, amount_minor (cents), currency, cny_minor, fx_rate (0 for the same currency), note, recorded_by, sponsored_at (RFC 3339)",
     source: |db| format!("{db} (sponsor_records)"),
     none: "The old version has no sponsor records.",
+    unreadable: |error| {
+        format!(
+            "Cannot read the session database ({error}); the sponsor records were not migrated and stay in the archive."
+        )
+    },
     not_installed: |n, plugin| {
         format!(
             "{n} sponsor record(s): the sponsor plugin `{plugin}` is not installed. Install it and run the migration again (that will not add duplicates)."
