@@ -49,9 +49,9 @@ fn kept(state: &Path) -> PathBuf {
 
 fn old_root() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    fs::create_dir_all(dir.path().join("home/shorin")).unwrap();
-    fs::write(dir.path().join(".home-layout-v1"), "shorin\n").unwrap();
-    fs::write(dir.path().join("home/shorin/conversation.db"), b"db").unwrap();
+    fs::create_dir_all(dir.path().join("home/tester")).unwrap();
+    fs::write(dir.path().join(".home-layout-v1"), "tester\n").unwrap();
+    fs::write(dir.path().join("home/tester/conversation.db"), b"db").unwrap();
     dir
 }
 
@@ -132,7 +132,7 @@ fn a_run_leaves_the_archive_its_list_and_two_reports() {
     let agent: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&done.agent).unwrap()).unwrap();
     assert_eq!(agent["old_root"]["layout"], "home-layout-v1");
-    assert_eq!(agent["old_root"]["admin"], "shorin");
+    assert_eq!(agent["old_root"]["admin"], "tester");
     assert_eq!(agent["archive"]["files"], 2);
     assert_eq!(
         agent["personas"],
@@ -144,7 +144,7 @@ fn a_run_leaves_the_archive_its_list_and_two_reports() {
     assert_eq!(agent["items"][1]["what"], "personas");
     assert_eq!(agent["items"][1]["migrated"], 2);
     assert!(
-        old.path().join("home/shorin/conversation.db").is_file(),
+        old.path().join("home/tester/conversation.db").is_file(),
         "旧目录不动"
     );
 }
@@ -193,7 +193,7 @@ fn too_little_room_stops_before_packing() {
         ..plan(old.path(), state.path())
     };
     match run(&tight_plan, &mut Fake) {
-        // 旧根里 `shorin\n` 和 `db` 一共 9 个字节，要两倍。
+        // 旧根里 `tester\n` 和 `db` 一共 9 个字节，要两倍。
         Err(RunError::NoSpace {
             need: 18,
             have: 3,

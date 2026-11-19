@@ -9,9 +9,9 @@ use miyu_migrate::jsonc::parse;
 /// 密钥全不迁）；或者把字符串里的 `, }` 当成末尾逗号删掉。
 #[test]
 fn audit_139_a_string_ending_in_a_backslash_does_not_flip_the_quotes() {
-    let config = parse(r#"{"dir": "C:\\Users\\shorin\\", "model": "gpt-4o", }"#)
+    let config = parse(r#"{"dir": "C:\\Users\\a\\", "model": "gpt-4o", }"#)
         .expect("末尾逗号要去掉，整份读得懂");
-    assert_eq!(config["dir"], "C:\\Users\\shorin\\");
+    assert_eq!(config["dir"], "C:\\Users\\a\\");
     assert_eq!(config["model"], "gpt-4o");
 
     let list = parse(r#"{"dir": "C:\\x\\", "list": [1, 2, ], "k": 1}"#).expect("读得懂");

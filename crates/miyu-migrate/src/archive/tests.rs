@@ -5,10 +5,10 @@ use super::*;
 fn old_root() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    fs::create_dir_all(root.join("home/shorin")).unwrap();
+    fs::create_dir_all(root.join("home/tester")).unwrap();
     fs::create_dir_all(root.join("state/empty")).unwrap();
-    fs::write(root.join(".home-layout-v1"), "shorin\n").unwrap();
-    fs::write(root.join("home/shorin/conversation.db"), vec![7u8; 100_000]).unwrap();
+    fs::write(root.join(".home-layout-v1"), "tester\n").unwrap();
+    fs::write(root.join("home/tester/conversation.db"), vec![7u8; 100_000]).unwrap();
     fs::write(root.join("state/usage.db"), b"usage").unwrap();
     dir
 }
@@ -29,8 +29,8 @@ fn packing_lists_every_file_with_its_hash_and_unpacks_the_same() {
         [
             ".home-layout-v1",
             "home",
-            "home/shorin",
-            "home/shorin/conversation.db",
+            "home/tester",
+            "home/tester/conversation.db",
             "state",
             "state/empty",
             "state/usage.db"

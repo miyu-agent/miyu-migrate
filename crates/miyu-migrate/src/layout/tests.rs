@@ -17,26 +17,26 @@ fn root_with(files: &[(&str, &str)]) -> tempfile::TempDir {
 #[test]
 fn the_home_layout_puts_the_session_database_in_the_admins_home() {
     let dir = root_with(&[
-        (".home-layout-v1", "shorin\n"),
+        (".home-layout-v1", "tester\n"),
         (".resource-layout-v1", "1\n"),
         (".layout-v1", "1\n"),
     ]);
     let layout = read(dir.path()).unwrap();
     assert_eq!(layout.generation, Generation::Home);
-    assert_eq!(layout.admin.as_deref(), Some("shorin"));
+    assert_eq!(layout.admin.as_deref(), Some("tester"));
     assert_eq!(
         layout.conversation_db(),
-        dir.path().join("home/shorin/conversation.db")
+        dir.path().join("home/tester/conversation.db")
     );
     assert_eq!(layout.personas(), dir.path().join("personas"));
     assert_eq!(layout.skills(), dir.path().join("extensions/skills"));
     assert_eq!(layout.prompts(), dir.path().join("data/prompts"));
-    assert_eq!(layout.profile(), dir.path().join("home/shorin/profile.md"));
+    assert_eq!(layout.profile(), dir.path().join("home/tester/profile.md"));
     assert_eq!(
         layout.user_dir("pictures"),
-        dir.path().join("home/shorin/pictures")
+        dir.path().join("home/tester/pictures")
     );
-    assert_eq!(layout.workspace(), dir.path().join("home/shorin/workspace"));
+    assert_eq!(layout.workspace(), dir.path().join("home/tester/workspace"));
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn older_generations_keep_things_where_they_were() {
 #[test]
 fn a_rolled_back_home_layout_is_read_as_the_one_before() {
     let dir = root_with(&[
-        (".home-layout-v1", "shorin\n"),
+        (".home-layout-v1", "tester\n"),
         (".home-layout-off", ""),
         (".resource-layout-v1", "1\n"),
     ]);
@@ -90,7 +90,7 @@ fn a_rolled_back_home_layout_is_read_as_the_one_before() {
 #[test]
 fn unfinished_moves_strangers_and_bad_names_are_refused() {
     let unfinished = root_with(&[
-        (".home-layout-v1", "shorin\n"),
+        (".home-layout-v1", "tester\n"),
         (".home-layout-v1.journal.json", "{}"),
     ]);
     assert!(matches!(
